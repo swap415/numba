@@ -184,7 +184,6 @@ class TestBuild(TestCase):
                     "c",
                     "gcc_s",
                     "ld-linux-aarch64",
-                    "pthread",
                     "stdc++",
                 ]),
                 "mviewbuf.cpython-310-aarch64-linux-gnu.so": set([
@@ -203,7 +202,6 @@ class TestBuild(TestCase):
                     "c",
                     "gcc_s",
                     "ld-linux-aarch64",
-                    "pthread",
                     "stdc++",
                 ]),
             },
