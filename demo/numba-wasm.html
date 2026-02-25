@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>numba wasm</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'SF Mono', 'Menlo', monospace; font-size: 13px; color: #111; padding: 48px 24px; max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 14px; font-weight: 500; color: #999; margin-bottom: 32px; }
+  h1 span { color: #0066cc; font-weight: 600; }
+  .example { margin-bottom: 40px; }
+  .label { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  pre { background: #f7f7f7; border: 1px solid #e5e5e5; border-radius: 4px; padding: 12px; font-size: 12px; line-height: 1.6; overflow-x: auto; white-space: pre; }
+  .python { color: #0066cc; }
+  .call { margin: 8px 0; font-size: 13px; }
+  .call .fn { color: #0066cc; }
+  .call .arrow { color: #999; }
+  .call .expect { color: #666; }
+  button { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 5px 14px; font-family: inherit; font-size: 12px; cursor: pointer; color: #333; }
+  button:hover { border-color: #999; }
+  button:active { background: #f0f0f0; }
+  .output { margin-top: 8px; min-height: 20px; font-size: 12px; color: #333; white-space: pre-wrap; }
+  .output .ok { color: #16a34a; }
+  .output .err { color: #dc2626; }
+  .output .dim { color: #999; }
+  hr { border: none; border-top: 1px solid #eee; margin: 32px 0; }
+  .note { font-size: 11px; color: #999; margin-top: 32px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<h1><span>numba</span> &mdash; Python compiled to WebAssembly, running in browser</h1>
+
+<div id="examples"></div>
+
+<div class="note">
+  These Python functions were compiled to WebAssembly using numba's @wasm_jit decorator.<br>
+  The WASM binaries are embedded in this page and run directly in your browser.
+</div>
+
+<script>
+const E = [
+  {
+    name: 'addition',
+    python: `@wasm_jit
+def add(a, b):
+    return a + b`,
+    wasm: 'AGFzbQEAAAABDAJgAABgBH9/fn4BfwMDAgABBQMBAAIGPwp/AUGAiAQLfwBBgAgLfwBBgAgLfwBBgAgLfwBBgIgEC38AQYAIC38AQYCIBAt/AEGAgAgLfwBBAAt/AEEBCwfqAQwGbWVtb3J5AgARX193YXNtX2NhbGxfY3RvcnMAAEZfWk44X19tYWluX18zYWRkQjJ2MUI0NGM4dEpUQWVHSXNKMXRtQ1BBXzJmMlBGaFcyb0dRQkVVYU5PTENFSmdBXzNkRXh4AAEMX19kc29faGFuZGxlAwEKX19kYXRhX2VuZAMCC19fc3RhY2tfbG93AwMMX19zdGFja19oaWdoAwQNX19nbG9iYWxfYmFzZQMFC19faGVhcF9iYXNlAwYKX19oZWFwX2VuZAMHDV9fbWVtb3J5X2Jhc2UDCAxfX3RhYmxlX2Jhc2UDCQoTAgIACw4AIAAgAiADfDcDAEEACwCcAQRuYW1lAAwLb3V0cHV0Lndhc20BcwIAEV9fd2FzbV9jYWxsX2N0b3JzAV1fX21haW5fXzo6YWRkW2FiaTp2MV1bYWJpOmM4dEpUQWVHSXNKMXRtQ1BBXzJmMlBGaFcyb0dRQkVVYU5PTENFSmdBXzNkXShsb25nIGxvbmcsIGxvbmcgbG9uZykHEgEAD19fc3RhY2tfcG9pbnRlcgCUAQ90YXJnZXRfZmVhdHVyZXMIKwtidWxrLW1lbW9yeSsPYnVsay1tZW1vcnktb3B0KxZjYWxsLWluZGlyZWN0LW92ZXJsb25nKwptdWx0aXZhbHVlKw9tdXRhYmxlLWdsb2JhbHMrE25vbnRyYXBwaW5nLWZwdG9pbnQrD3JlZmVyZW5jZS10eXBlcysIc2lnbi1leHQ=',
+    func: '_ZN8__main__3addB2v1B44c8tJTAeGIsJ1tmCPA_2f2PFhW2oGQBEUaNOLCEJgA_3dExx',
+    display: 'add', args: [7, 8], expected: 15,
+  },
+  {
+    name: 'multiplication',
+    python: `@wasm_jit
+def mul(a, b):
+    return a * b`,
+    wasm: 'AGFzbQEAAAABDAJgAABgBH9/fn4BfwMDAgABBQMBAAIGPwp/AUGAiAQLfwBBgAgLfwBBgAgLfwBBgAgLfwBBgIgEC38AQYAIC38AQYCIBAt/AEGAgAgLfwBBAAt/AEEBCwfqAQwGbWVtb3J5AgARX193YXNtX2NhbGxfY3RvcnMAAEZfWk44X19tYWluX18zbXVsQjJ2MkI0NGM4dEpUQWVHSXNKMXRtQ1BBXzJmMlBGaFcyb0dRQkVVYU5PTENFSmdBXzNkRXh4AAEMX19kc29faGFuZGxlAwEKX19kYXRhX2VuZAMCC19fc3RhY2tfbG93AwMMX19zdGFja19oaWdoAwQNX19nbG9iYWxfYmFzZQMFC19faGVhcF9iYXNlAwYKX19oZWFwX2VuZAMHDV9fbWVtb3J5X2Jhc2UDCAxfX3RhYmxlX2Jhc2UDCQoTAgIACw4AIAAgAiADfjcDAEEACwCcAQRuYW1lAAwLb3V0cHV0Lndhc20BcwIAEV9fd2FzbV9jYWxsX2N0b3JzAV1fX21haW5fXzo6bXVsW2FiaTp2Ml1bYWJpOmM4dEpUQWVHSXNKMXRtQ1BBXzJmMlBGaFcyb0dRQkVVYU5PTENFSmdBXzNkXShsb25nIGxvbmcsIGxvbmcgbG9uZykHEgEAD19fc3RhY2tfcG9pbnRlcgCUAQ90YXJnZXRfZmVhdHVyZXMIKwtidWxrLW1lbW9yeSsPYnVsay1tZW1vcnktb3B0KxZjYWxsLWluZGlyZWN0LW92ZXJsb25nKwptdWx0aXZhbHVlKw9tdXRhYmxlLWdsb2JhbHMrE25vbnRyYXBwaW5nLWZwdG9pbnQrD3JlZmVyZW5jZS10eXBlcysIc2lnbi1leHQ=',
+    func: '_ZN8__main__3mulB2v2B44c8tJTAeGIsJ1tmCPA_2f2PFhW2oGQBEUaNOLCEJgA_3dExx',
+    display: 'mul', args: [6, 7], expected: 42,
+  },
+  {
+    name: 'loop (sum 0..n)',
+    python: `@wasm_jit
+def sum_n(n):
+    total = 0
+    for i in range(n):
+        total += i
+    return total`,
+    wasm: 'AGFzbQEAAAABCwJgAABgA39/fgF/AwMCAAEFAwEAAgY/Cn8BQZCJBAt/AEGACAt/AEGECQt/AEGQCQt/AEGQiQQLfwBBgAgLfwBBkIkEC38AQYCACAt/AEEAC38AQQELB+sBDAZtZW1vcnkCABFfX3dhc21fY2FsbF9jdG9ycwAAR19aTjhfX21haW5fXzVzdW1fbkIydjNCNDRjOHRKVEFlR0lzSjF0bUNQQV8yZjJQRmhXMm9HUUJFVWFOT0xDRUpnQV8zZEV4AAEMX19kc29faGFuZGxlAwEKX19kYXRhX2VuZAMCC19fc3RhY2tfbG93AwMMX19zdGFja19oaWdoAwQNX19nbG9iYWxfYmFzZQMFC19faGVhcF9iYXNlAwYKX19oZWFwX2VuZAMHDV9fbWVtb3J5X2Jhc2UDCAxfX3RhYmxlX2Jhc2UDCQqwBgICAAuqBgMBfwF+AX8jgICAgABB8AFrIgMkgICAgAAgA0IANwPQASADQgA3A+gBIANCADcD2AEgA0IANwPgASADQgA3A7gBIANCADcDwAEgA0IANwPIASADQQA2ApgBIANCADcDoAEgA0IANwOoASADQQA2ArABIANCADcDkAEgA0IANwOIASADQgA3A4ABIANBADYCYCADQgA3A2ggA0IANwNwIANBADYCeCADQgA3A8ABIANCADcDyAEgA0EAOgBYIANCADcDUCADQQA2AkggA0IANwNAIANCADcDOCADQQA2AjAgA0EAOgAoIANCADcDICADQQA6ABggA0IANwMQIANCADcDCCADQgA3A+gBIANCADcD0AEgAyACNwPYASADQgE3A+ABIANCADcDuAEgAyACNwPAASADQgE3A8gBIANCADcDuAEgA0IANwOQASADIAMpA8ABIgQ3A6ABIAMgAykDyAEiAjcDqAEgAyADQZABajYCmAEgAyADQYgBajYCsAECQCACUA0AAkACQCAEQgBVIAJCAFVzRQ0AIAMoArABQgA3AwAMAQsgAygCsAEgBCACfyAEIAKBIgJCACACfSAEQgBVG0IAVa18NwMACyADIAMoApgBNgJgIAMgAykDoAE3A2ggAyADKQOoATcDcCADIAMoArABNgJ4A0AgAyADKAJgNgIwIAMgAykDaDcDOCADIAMpA3A3A0AgAyADKAJ4IgE2AkggA0IANwNQIAMgASkDACIEQgBVIgU6AFgCQCAFRQ0AIAMoAjAiBSkDACECIAEgBEJ/fDcDACAFIAIgAykDQHw3AwAgAyACNwNQCyADIAMpA1AiAjcDICADIAMtAFgiAToAKCADIAI3AxAgAyABOgAYIAMgAjcDCAJAIAFFDQAgAykDCCECIANCADcDCCADIAIgAykD6AF8NwPoAQwBCwsgACADKQPoATcDACADQQA2AmAgA0IANwMIIANCADcDaCADQgA3A3AgA0EANgJ4IANCADcD6AEgA0HwAWokgICAgABBAA8LIAFB8IiAgAA2AgAgA0IANwOAASADQfABaiSAgICAAEEBCwuMAQEAQYAIC4QBgASVQQAAAAAAAACMCGJ1aWx0aW5zlIwKVmFsdWVFcnJvcpSTlIwecmFuZ2UoKSBhcmcgMyBtdXN0IG5vdCBiZSB6ZXJvlIWUToeULgAAAADKjvs6ctYU/ocgMszjrDJgB6MHJwAAAAAAAAAAAAAAAAAEAABMAAAAUAQAAAAAAAAAAAAAAJ8BBG5hbWUADAtvdXRwdXQud2FzbQFqAgARX193YXNtX2NhbGxfY3RvcnMBVF9fbWFpbl9fOjpzdW1fblthYmk6djNdW2FiaTpjOHRKVEFlR0lzSjF0bUNQQV8yZjJQRmhXMm9HUUJFVWFOT0xDRUpnQV8zZF0obG9uZyBsb25nKQcSAQAPX19zdGFja19wb2ludGVyCQoBAAcucm9kYXRhAJQBD3RhcmdldF9mZWF0dXJlcwgrC2J1bGstbWVtb3J5Kw9idWxrLW1lbW9yeS1vcHQrFmNhbGwtaW5kaXJlY3Qtb3ZlcmxvbmcrCm11bHRpdmFsdWUrD211dGFibGUtZ2xvYmFscysTbm9udHJhcHBpbmctZnB0b2ludCsPcmVmZXJlbmNlLXR5cGVzKwhzaWduLWV4dA==',
+    func: '_ZN8__main__5sum_nB2v3B44c8tJTAeGIsJ1tmCPA_2f2PFhW2oGQBEUaNOLCEJgA_3dEx',
+    display: 'sum_n', args: [100], expected: 4950,
+  },
+  {
+    name: 'fibonacci',
+    python: `@wasm_jit
+def fib(n):
+    if n <= 1:
+        return n
+    a, b = 0, 1
+    for _ in range(n - 1):
+        a, b = b, a + b
+    return b`,
+    wasm: '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',
+    func: '_ZN8__main__3fibB2v4B44c8tJTAeGIsJ1tmCPA_2f2PFhW2oGQBEUaNOLCEJgA_3dEx',
+    display: 'fib', args: [20], expected: 6765,
+  },
+];
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+const root = document.getElementById('examples');
+E.forEach((ex, i) => {
+  const div = document.createElement('div');
+  div.className = 'example';
+  const argStr = ex.args.join(', ');
+  div.innerHTML = `
+    ${i > 0 ? '<hr>' : ''}
+    <div class="label">${esc(ex.name)}</div>
+    <pre class="python">${esc(ex.python)}</pre>
+    <div class="call"><span class="fn">${esc(ex.display)}(${esc(argStr)})</span> <span class="arrow">&rarr;</span> <span class="expect">expected ${ex.expected}</span></div>
+    <button onclick="run(${i})">run</button>
+    <div class="output" id="out-${i}"></div>
+  `;
+  root.appendChild(div);
+});
+
+async function run(i) {
+  const ex = E[i];
+  const el = document.getElementById(`out-${i}`);
+  el.textContent = '';
+  const log = s => { el.innerHTML += s + '\n'; };
+
+  const bytes = Uint8Array.from(atob(ex.wasm), c => c.charCodeAt(0));
+  const magic = Array.from(bytes.slice(0,4)).map(b => b.toString(16).padStart(2,'0')).join(' ');
+  log(`<span class="dim">${bytes.length} bytes  magic: ${magic}</span>`);
+
+  const valid = WebAssembly.validate(bytes);
+  if (!valid) { log('<span class="err">invalid wasm</span>'); return; }
+  log(`<span class="dim">valid: ${valid}</span>`);
+
+  const { instance } = await WebAssembly.instantiate(bytes);
+  const fn = instance.exports[ex.func];
+  if (!fn) { log(`<span class="err">export "${ex.func}" not found</span>`); return; }
+
+  // The numba function uses CPU calling convention:
+  // func(retptr, excinfo, ...args) -> status
+  const memory = instance.exports.memory;
+  const RETPTR = 0;    // Return value at offset 0
+  const EXCINFO = 16;  // Exception info at offset 16
+
+  const t0 = performance.now();
+  const status = fn(RETPTR, EXCINFO, ...ex.args);
+  const ms = (performance.now() - t0).toFixed(4);
+
+  if (status !== 0) {
+    log(`<span class="err">function returned error status: ${status}</span>`);
+    return;
+  }
+
+  // Read i64 result from memory (little-endian)
+  const view = new DataView(memory.buffer);
+  const lo = view.getUint32(RETPTR, true);
+  const hi = view.getInt32(RETPTR + 4, true);
+  const result = lo + hi * 0x100000000;
+
+  const pass = (result === ex.expected);
+  log(`<span class="${pass ? 'ok' : 'err'}">${ex.display}(${ex.args.join(', ')}) = ${result}</span>  <span class="dim">${ms} ms</span>`);
+}
+</script>
+</body>
+</html>

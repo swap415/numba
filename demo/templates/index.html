@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>numba wasm</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'SF Mono', Menlo, monospace; font-size: 13px; color: #111; padding: 48px 24px; max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 13px; font-weight: 400; color: #999; margin-bottom: 24px; }
+  h1 span { color: #0066cc; }
+  textarea { width: 100%; min-height: 180px; border: 1px solid #ddd; border-radius: 4px; padding: 12px; font: inherit; font-size: 12px; line-height: 1.6; outline: none; resize: vertical; }
+  textarea:focus { border-color: #999; }
+  .bar { display: flex; gap: 8px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
+  button { border: 1px solid #ccc; border-radius: 4px; padding: 5px 14px; font: inherit; font-size: 12px; cursor: pointer; background: #fff; }
+  button:hover { border-color: #999; }
+  button:disabled { opacity: .4; }
+  .ex { color: #999; font-size: 11px; cursor: pointer; }
+  .ex:hover { color: #111; }
+  label { font-size: 12px; color: #666; }
+  input[type="text"] { border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; font: inherit; font-size: 12px; width: 200px; }
+  #out { margin-top: 16px; white-space: pre-wrap; font-size: 12px; line-height: 1.6; min-height: 60px; }
+  .ok { color: #16a34a; }
+  .err { color: #dc2626; }
+  .dim { color: #999; }
+  .note { font-size: 11px; color: #999; margin-top: 24px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<h1><span>numba</span> &mdash; Python &rarr; WebAssembly &rarr; browser</h1>
+
+<textarea id="code" spellcheck="false">@wasm_jit
+def add(a, b):
+    return a + b</textarea>
+
+<div class="bar">
+  <button id="btn" onclick="go()">compile & run</button>
+  <label>args: <input type="text" id="args" value="3, 4"></label>
+  <span class="ex" onclick="load('add')">add</span>
+  <span class="ex" onclick="load('mul')">multiply</span>
+  <span class="ex" onclick="load('sum_n')">loop</span>
+  <span class="ex" onclick="load('fib')">fibonacci</span>
+</div>
+
+<div id="out"></div>
+
+<div class="note">
+  Python functions are compiled to WebAssembly using numba's @wasm_jit decorator.<br>
+  The WASM binary runs directly in your browser via WebAssembly.instantiate().
+</div>
+
+<script>
+const examples = {
+  add: {
+    code: `@wasm_jit
+def add(a, b):
+    return a + b`,
+    args: '3, 4',
+  },
+  mul: {
+    code: `@wasm_jit
+def mul(a, b):
+    return a * b`,
+    args: '6, 7',
+  },
+  sum_n: {
+    code: `@wasm_jit
+def sum_n(n):
+    total = 0
+    for i in range(n):
+        total += i
+    return total`,
+    args: '100',
+  },
+  fib: {
+    code: `@wasm_jit
+def fib(n):
+    if n <= 1:
+        return n
+    a, b = 0, 1
+    for _ in range(n - 1):
+        a, b = b, a + b
+    return b`,
+    args: '20',
+  },
+};
+
+function load(name) {
+  const ex = examples[name];
+  document.getElementById('code').value = ex.code;
+  document.getElementById('args').value = ex.args;
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+async function go() {
+  const btn = document.getElementById('btn');
+  const out = document.getElementById('out');
+  const code = document.getElementById('code').value;
+  const argsStr = document.getElementById('args').value;
+
+  // Parse function name from code
+  const match = code.match(/def\s+(\w+)\s*\(/);
+  if (!match) {
+    out.innerHTML = '<span class="err">Could not find function definition</span>';
+    return;
+  }
+  const funcName = match[1];
+
+  // Parse args
+  const args = argsStr.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+
+  btn.disabled = true;
+  out.innerHTML = '<span class="dim">compiling Python to WebAssembly...</span>';
+
+  try {
+    const resp = await fetch('/api/compile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, func_name: funcName }),
+    });
+    const d = await resp.json();
+    if (!d.ok) {
+      out.innerHTML = `<span class="err">${esc(d.error)}</span>`;
+      return;
+    }
+
+    let log = '';
+    const ln = s => { log += s + '\n'; };
+
+    // Load WASM in browser
+    const bytes = Uint8Array.from(atob(d.wasm), c => c.charCodeAt(0));
+    ln(`<span class="dim">compiled ${d.size} bytes of WebAssembly</span>`);
+
+    const valid = WebAssembly.validate(bytes);
+    ln(`<span class="dim">WebAssembly.validate: </span><span class="${valid ? 'ok' : 'err'}">${valid}</span>`);
+    if (!valid) { out.innerHTML = log; return; }
+
+    const { instance } = await WebAssembly.instantiate(bytes);
+
+    // The numba function uses CPU calling convention:
+    // func(retptr, excinfo, ...args) -> status
+    // We need to call it with memory offsets and read the result
+    const fn = instance.exports[d.llvm_func_name];
+    if (!fn) {
+      ln(`<span class="err">function ${d.llvm_func_name} not found in exports</span>`);
+      out.innerHTML = log;
+      return;
+    }
+
+    // Use WASM memory for return value
+    const memory = instance.exports.memory;
+    const RETPTR = 0;    // Return value at offset 0
+    const EXCINFO = 16;  // Exception info at offset 16
+
+    const t0 = performance.now();
+    const status = fn(RETPTR, EXCINFO, ...args);
+    const ms = (performance.now() - t0).toFixed(4);
+
+    if (status !== 0) {
+      ln(`<span class="err">function returned error status: ${status}</span>`);
+      out.innerHTML = log;
+      return;
+    }
+
+    // Read i64 result from memory (little-endian)
+    const view = new DataView(memory.buffer);
+    const lo = view.getUint32(RETPTR, true);
+    const hi = view.getInt32(RETPTR + 4, true);
+    const result = lo + hi * 0x100000000;
+
+    ln(`\n<span class="ok">${funcName}(${args.join(', ')}) = ${result}</span>  <span class="dim">${ms} ms</span>`);
+    out.innerHTML = log;
+
+  } catch (e) {
+    out.innerHTML = `<span class="err">${esc(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('code').addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); go(); }
+});
+</script>
+</body>
+</html>

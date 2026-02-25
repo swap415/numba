@@ -33,8 +33,7 @@ class TestWASMCodegen(unittest.TestCase):
         i32 = llvmir.IntType(32)
         fnty = llvmir.FunctionType(i32, [i32, i32])
         fn = llvmir.Function(ir_module, fnty, name="add")
-        fn.attributes.add("wasm-export-name")
-        fn.attributes.target_dependent["wasm-export-name"] = "add"
+        # Function linkage defaults to external, which will be exported
 
         # Build function body
         block = fn.append_basic_block(name="entry")
@@ -66,8 +65,6 @@ class TestWASMCodegen(unittest.TestCase):
         i32 = llvmir.IntType(32)
         fnty = llvmir.FunctionType(i32, [i32, i32])
         fn = llvmir.Function(ir_module, fnty, name="multiply")
-        fn.attributes.add("wasm-export-name")
-        fn.attributes.target_dependent["wasm-export-name"] = "multiply"
 
         block = fn.append_basic_block(name="entry")
         builder = llvmir.IRBuilder(block)
@@ -82,6 +79,59 @@ class TestWASMCodegen(unittest.TestCase):
 
         mul_fn = lib.get_wasm_function("multiply")
         self.assertEqual(mul_fn(6, 7), 42)
+
+
+class TestWASMJit(unittest.TestCase):
+    """Test @wasm_jit decorator."""
+
+    def test_simple_add(self):
+        """Test simple addition with @wasm_jit."""
+        from numba.core.wasm import wasm_jit
+
+        @wasm_jit
+        def add(a, b):
+            return a + b
+
+        self.assertEqual(add(3, 4), 7)
+        self.assertEqual(add(100, 200), 300)
+
+    def test_multiply(self):
+        """Test multiplication with @wasm_jit."""
+        from numba.core.wasm import wasm_jit
+
+        @wasm_jit
+        def mul(a, b):
+            return a * b
+
+        self.assertEqual(mul(6, 7), 42)
+
+    def test_loop(self):
+        """Test loop with @wasm_jit."""
+        from numba.core.wasm import wasm_jit
+
+        @wasm_jit
+        def sum_n(n):
+            total = 0
+            for i in range(n):
+                total += i
+            return total
+
+        self.assertEqual(sum_n(10), 45)
+        self.assertEqual(sum_n(100), 4950)
+
+    def test_get_wasm_bytes(self):
+        """Test that WASM bytes can be retrieved."""
+        from numba.core.wasm import wasm_jit
+
+        @wasm_jit
+        def add(a, b):
+            return a + b
+
+        # Trigger compilation
+        add(1, 2)
+
+        wasm_bytes = add.get_wasm_bytes()
+        self.assertTrue(wasm_bytes.startswith(b'\x00asm'))
 
 
 if __name__ == "__main__":
