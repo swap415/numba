@@ -107,8 +107,8 @@ async function go() {
   }
   const funcName = match[1];
 
-  // Parse args
-  const args = argsStr.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+  // Parse args as BigInt (numba uses i64)
+  const args = argsStr.split(',').map(s => BigInt(parseInt(s.trim(), 10))).filter(n => !isNaN(Number(n)));
 
   btn.disabled = true;
   out.innerHTML = '<span class="dim">compiling Python to WebAssembly...</span>';
@@ -150,14 +150,15 @@ async function go() {
 
     // Use WASM memory for return value
     const memory = instance.exports.memory;
-    const RETPTR = 0;    // Return value at offset 0
-    const EXCINFO = 16;  // Exception info at offset 16
+    const RETPTR = 0;     // Return value at offset 0
+    const EXCINFO = 16;   // Exception info at offset 16
 
     const t0 = performance.now();
+    // Call with i32 pointers, BigInt args
     const status = fn(RETPTR, EXCINFO, ...args);
     const ms = (performance.now() - t0).toFixed(4);
 
-    if (status !== 0) {
+    if (status !== 0 && status !== 0n) {
       ln(`<span class="err">function returned error status: ${status}</span>`);
       out.innerHTML = log;
       return;
@@ -169,7 +170,9 @@ async function go() {
     const hi = view.getInt32(RETPTR + 4, true);
     const result = lo + hi * 0x100000000;
 
-    ln(`\n<span class="ok">${funcName}(${args.join(', ')}) = ${result}</span>  <span class="dim">${ms} ms</span>`);
+    // Convert BigInt args to string for display
+    const argsDisplay = args.map(a => a.toString()).join(', ');
+    ln(`\n<span class="ok">${funcName}(${argsDisplay}) = ${result}</span>  <span class="dim">${ms} ms</span>`);
     out.innerHTML = log;
 
   } catch (e) {
