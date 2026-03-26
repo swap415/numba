@@ -965,7 +965,7 @@ class ControlFlowAnalysis(object):
         def op_RETURN_CONST(self, inst):
             self._curblock.terminating = True
             self._force_new_block = True
-    elif PYVERSION in ((3, 10), (3, 11)):
+    elif PYVERSION in ((3, 10), (3, 11), (3, 15)):
         pass
     else:
         raise NotImplementedError(PYVERSION)
