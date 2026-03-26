@@ -409,10 +409,28 @@ compute_fingerprint(string_writer_t *w, PyObject *val)
     }
     /* Note we only accept sets, not frozensets */
     if (Py_TYPE(val) == &PySet_Type) {
-        Py_hash_t h;
         PyObject *item;
-        Py_ssize_t pos = 0;
         /* Only one item is considered, as in typeof.py */
+#if (PY_MAJOR_VERSION == 3) && (PY_MINOR_VERSION >= 15)
+        PyObject *iter = PyObject_GetIter(val);
+        if (iter == NULL) {
+            return -1;
+        }
+        item = PyIter_Next(iter);
+        Py_DECREF(iter);
+        if (item == NULL) {
+            /* Empty set */
+            PyErr_SetString(PyExc_ValueError,
+                            "cannot compute fingerprint of empty set");
+            return -1;
+        }
+        TRY(string_writer_put_char, w, OP_SET);
+        int ret = compute_fingerprint(w, item);
+        Py_DECREF(item);
+        return ret;
+#else
+        Py_hash_t h;
+        Py_ssize_t pos = 0;
         if (!_PySet_NextEntry(val, &pos, &item, &h)) {
             /* Empty set */
             PyErr_SetString(PyExc_ValueError,
@@ -422,6 +440,7 @@ compute_fingerprint(string_writer_t *w, PyObject *val)
         TRY(string_writer_put_char, w, OP_SET);
         TRY(compute_fingerprint, w, item);
         return 0;
+#endif
     }
     if (PyObject_CheckBuffer(val)) {
         Py_buffer buf;
