@@ -463,8 +463,13 @@ class TraceRunner(object):
     def op_POP_TOP(self, state, inst):
         state.pop()
 
-    if PYVERSION in ((3, 14), (3, 15)):
-        # New in 3.14
+    if PYVERSION == (3, 15):
+        # 3.15: POP_ITER pops both iterator and iterable (stack effect -2)
+        def op_POP_ITER(self, state, inst):
+            state.pop()
+            state.pop()
+    elif PYVERSION == (3, 14):
+        # 3.14: POP_ITER pops iterator only (stack effect -1)
         op_POP_ITER = op_POP_TOP
     elif PYVERSION in ((3, 10), (3, 11), (3, 12), (3, 13)):
         pass
@@ -1600,10 +1605,18 @@ class TraceRunner(object):
                      res=res)
 
     def op_GET_ITER(self, state, inst):
-        value = state.pop()
-        res = state.make_temp()
-        state.append(inst, value=value, res=res)
-        state.push(res)
+        if PYVERSION >= (3, 15):
+            # 3.15+: GET_ITER keeps iterable on stack, pushes iterator
+            # on top. POP_ITER later cleans up both.
+            value = state.get_tos()
+            res = state.make_temp()
+            state.append(inst, value=value, res=res)
+            state.push(res)
+        else:
+            value = state.pop()
+            res = state.make_temp()
+            state.append(inst, value=value, res=res)
+            state.push(res)
 
     def op_FOR_ITER(self, state, inst):
         iterator = state.get_tos()
