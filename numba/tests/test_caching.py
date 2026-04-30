@@ -234,8 +234,10 @@ class BaseCacheTest(TestCase):
         # the on-disk cache if possible.
         old = sys.modules.pop(self.modname, None)
         if old is not None:
-            # Make sure cached bytecode is removed
-            cached = [old.__cached__]
+            # Make sure cached bytecode is removed.
+            # Python 3.15 removed module.__cached__; __spec__.cached is the
+            # canonical equivalent and works across all supported versions.
+            cached = [old.__spec__.cached]
             for fn in cached:
                 try:
                     os.unlink(fn)
