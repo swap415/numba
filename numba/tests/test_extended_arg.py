@@ -26,7 +26,12 @@ class TestExtendedArg(TestCase):
         consts = f.__code__.co_consts
         bytecode_format = "<BB"
         consts = consts + (None,) * self.bytecode_len + (42,)
-        if utils.PYVERSION >= (3, 11):
+        if utils.PYVERSION >= (3, 15):
+            # Python 3.15 added an inline CACHE slot to RESUME, so skip
+            # past both RESUME (2 bytes) and its CACHE (2 bytes) before
+            # injecting the EXTENDED_ARG.
+            offset = 4
+        elif utils.PYVERSION >= (3, 11):
             # Python 3.11 has a RESUME op code at the start of a function, need
             # to inject the EXTENDED_ARG after this to influence the LOAD_CONST
             offset = 2 # 2 byte op code
