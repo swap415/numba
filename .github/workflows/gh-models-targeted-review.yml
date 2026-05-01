@@ -1,8 +1,8 @@
 name: GH Models Targeted Review
 
-# Single-shot LLM via GitHub Models. Cannot run tests. Produces a
-# mapping from changed files to relevant numba.tests modules, plus
-# the exact runtests command a maintainer can run locally.
+# Single-shot LLM via GitHub Models. Cannot run tests.
+# Prompt uses only the changed-file list and the test-module filenames
+# (no diff body) to stay under gpt-4o's 8k-token cap.
 
 on:
   pull_request:
@@ -22,92 +22,62 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Compute PR diff
+      - name: Compute changed files
         run: |
-          git diff "origin/${{ github.base_ref }}...HEAD" > /tmp/pr.diff
           git diff "origin/${{ github.base_ref }}...HEAD" --name-only > /tmp/pr.files
-          # Truncate to keep prompt within model context.
-          head -c 80000 /tmp/pr.diff > /tmp/pr.diff.trim
-          mv /tmp/pr.diff.trim /tmp/pr.diff
+          # Only files that look like importable numba sources (not tests,
+          # not docs, not ci). The mapping task only needs these.
+          grep -E '^numba/.*\.(py|pyx)$' /tmp/pr.files | grep -v '^numba/tests/' > /tmp/pr.src || true
+          wc -l /tmp/pr.files /tmp/pr.src
 
       - name: List candidate test modules
         run: |
-          # The set of test files the model can choose from.
-          ls numba/tests/test_*.py > /tmp/test_modules.txt
+          # Filenames only, no path — keeps prompt small.
+          ls numba/tests/test_*.py | sed 's|.*/||;s|\.py$||' > /tmp/test_modules.txt
           wc -l /tmp/test_modules.txt
 
       - name: Build prompt
         run: |
-          cat > /tmp/prompt.txt <<'PROMPT_EOF'
-          You are reviewing a numba PR. Numba is a JIT compiler for
-          Python+NumPy.
-
-          Context you have:
-          - Changed files (one per line):
-          PROMPT_EOF
-          echo '```' >> /tmp/prompt.txt
-          cat /tmp/pr.files >> /tmp/prompt.txt
-          echo '```' >> /tmp/prompt.txt
-
-          cat >> /tmp/prompt.txt <<'PROMPT_EOF'
-
-          - Available test modules under numba/tests/ (filenames):
-          PROMPT_EOF
-          echo '```' >> /tmp/prompt.txt
-          cat /tmp/test_modules.txt >> /tmp/prompt.txt
-          echo '```' >> /tmp/prompt.txt
-
-          cat >> /tmp/prompt.txt <<'PROMPT_EOF'
-
-          - Unified diff:
-          PROMPT_EOF
-          echo '```diff' >> /tmp/prompt.txt
-          cat /tmp/pr.diff >> /tmp/prompt.txt
-          echo '```' >> /tmp/prompt.txt
-
-          cat >> /tmp/prompt.txt <<'PROMPT_EOF'
-
-          Output a single markdown document with this exact shape. No
-          prose outside the sections.
-
-          # GH Models targeted review of PR #__PR__
-
-          ## Step 1 — Changed source
-          List files outside numba/tests/ that are part of the importable
-          package (numba/**.py, numba/**.pyx). Skip docs/, benchmarks/,
-          examples/, .github/.
-
-          ## Step 2 — Test mapping
-          For each changed source file, pick test modules from the list
-          above that exercise it. Reasoning rules, in priority order:
-            1. Filename-stem match (typeof.py → test_typeof.py if it exists).
-            2. Module path: tests that import the changed module's package.
-            3. Symbol semantics: tests whose names obviously cover the
-               feature changed (e.g. dictionary/list changes → test_dictobject,
-               test_listobject).
-          If no plausible test exists for a file, say so explicitly.
-          Output a markdown table:
-          | changed file | relevant test modules | reason |
-
-          ## Step 3 — Recommended command
-          A single runtests invocation a maintainer can run locally:
-          ```
-          python -m numba.runtests -b -v -m 2 -- <space-separated dotted test modules>
-          ```
-          Use the union of the test modules from Step 2, deduped.
-          If Step 2 produced no mappings, output:
-          ```
-          # No targeted tests identifiable from the diff alone.
-          # Recommend: full sharded run (existing CI).
-          ```
-
-          ## Step 4 — Verdict
-          - INFO if mappings were produced.
-          - WARN if zero mappings (changes don't obviously map to any test).
-          One sentence justification.
-
-          PROMPT_EOF
-          sed -i "s/__PR__/${{ github.event.pull_request.number }}/" /tmp/prompt.txt
+          {
+            echo "Map changed numba source files to relevant test modules."
+            echo
+            echo "Rules:"
+            echo "- Filename stem match first (foo.py -> test_foo)."
+            echo "- Then subsystem match (numba/core/typing/* -> test_typing, test_typeof)."
+            echo "- Then semantic match (numba/typed/dictobject -> test_dictobject)."
+            echo "- If no plausible test exists, say so explicitly."
+            echo
+            echo "Changed source files:"
+            echo '```'
+            if [ -s /tmp/pr.src ]; then cat /tmp/pr.src; else echo "(none)"; fi
+            echo '```'
+            echo
+            echo "Available test modules (under numba/tests/):"
+            echo '```'
+            cat /tmp/test_modules.txt
+            echo '```'
+            echo
+            echo "Output markdown, this exact shape, no prose outside sections:"
+            echo
+            echo "# GH Models targeted review of PR #${{ github.event.pull_request.number }}"
+            echo
+            echo "## Test mapping"
+            echo "| changed file | relevant test modules | reason |"
+            echo "One row per changed file. Use dotted form numba.tests.test_X."
+            echo "If a file has no plausible test, write 'none' and a one-line reason."
+            echo
+            echo "## Recommended command"
+            echo '```'
+            echo "python -m numba.runtests -b -v -m 2 -- <space-separated dotted test modules>"
+            echo '```'
+            echo "Use the deduped union of all test modules from the table."
+            echo "If the table has zero mappings, output the comment:"
+            echo "# No targeted tests identifiable - run full sharded suite."
+            echo
+            echo "## Verdict"
+            echo "INFO if mappings produced, WARN if zero. One-sentence reason."
+          } > /tmp/prompt.txt
+          wc -c /tmp/prompt.txt
 
       - name: Run GH Models inference
         id: inference
@@ -115,7 +85,7 @@ jobs:
         with:
           model: openai/gpt-4o
           prompt-file: /tmp/prompt.txt
-          max-tokens: 3000
+          max-tokens: 1500
 
       - name: Save review markdown
         run: |
@@ -130,7 +100,7 @@ jobs:
           path: |
             /tmp/review.md
             /tmp/prompt.txt
-            /tmp/pr.diff
-            /tmp/pr.files
+            /tmp/pr.src
+            /tmp/test_modules.txt
           retention-days: 14
           if-no-files-found: warn

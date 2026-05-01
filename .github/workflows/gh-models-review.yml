@@ -1,7 +1,8 @@
 name: GH Models Silent Review
 
-# Runs a code review via GitHub Models (free, built-in).
-# No PR comments. Emits markdown to step summary and as an artifact.
+# Runs a high-level review via GitHub Models (free, built-in).
+# Prompt is bullet-only and passes diffstat (not full diff) to stay
+# under the 8k-token gpt-4o cap.
 
 on:
   pull_request:
@@ -21,52 +22,41 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Compute PR diff
-        id: diff
+      - name: Compute diffstat
         run: |
-          git diff "origin/${{ github.base_ref }}...HEAD" > /tmp/pr.diff
-          # Truncate to keep within model context. ~120k chars ≈ 30k tokens.
-          head -c 120000 /tmp/pr.diff > /tmp/pr.diff.trimmed
-          mv /tmp/pr.diff.trimmed /tmp/pr.diff
-          wc -l /tmp/pr.diff
+          git diff "origin/${{ github.base_ref }}...HEAD" --stat=200 > /tmp/pr.stat
+          git diff "origin/${{ github.base_ref }}...HEAD" --name-only > /tmp/pr.files
+          wc -l /tmp/pr.stat /tmp/pr.files
 
       - name: Build prompt
         run: |
-          cat > /tmp/prompt.txt <<'PROMPT_EOF'
-          You are reviewing a pull request to numba, a JIT compiler for Python+NumPy.
-
-          Focus on:
-          - Numba-compatibility: NumPy arrays, no Python objects in @njit / @vectorize / @prange paths
-          - Performance regressions in hot loops; type-stability and dispatch-cost issues
-          - Correctness of numerical changes
-          - Test coverage for changed numerical paths
-
-          Output a single markdown document with this exact shape:
-
-          # GH Models review of PR #__PR__
-
-          ## Summary
-          One paragraph. What the PR does and your overall take.
-
-          ## Findings
-          For each issue use:
-            ### [severity: high | medium | low | nit] Short title
-            - File: path/to/file.py:LINE
-            - Why it matters: ...
-            - Suggestion: ...
-          Omit this section entirely if there are no findings.
-
-          ## Tests
-          One short paragraph on test coverage adequacy.
-
-          ## Verdict
-          One of: pass, warn, fail. Followed by one sentence justification.
-
-          Below is the unified diff to review:
-
-          PROMPT_EOF
-          sed -i "s/__PR__/${{ github.event.pull_request.number }}/" /tmp/prompt.txt
-          cat /tmp/pr.diff >> /tmp/prompt.txt
+          {
+            echo "Review a numba PR. Numba: JIT compiler for Python+NumPy."
+            echo
+            echo "You have only the diffstat, not the diff body."
+            echo
+            echo "Diffstat:"
+            echo '```'
+            cat /tmp/pr.stat
+            echo '```'
+            echo
+            echo "Output markdown, no prose outside sections, this exact shape:"
+            echo
+            echo "# GH Models review of PR #${{ github.event.pull_request.number }}"
+            echo
+            echo "## Scope"
+            echo "Two bullets: which subsystems changed (numba/core, numba/np, numba/cuda, numba/typed, numba/tests, docs, ci) and rough size (small/medium/large)."
+            echo
+            echo "## Risk areas"
+            echo "Up to 5 bullets. Each bullet: subsystem - one-line risk based on what those files typically affect."
+            echo
+            echo "## Recommended attention"
+            echo "Up to 3 bullets. What a human reviewer should focus on first."
+            echo
+            echo "## Verdict"
+            echo "One line: low-risk | medium-risk | high-risk - one-sentence reason."
+          } > /tmp/prompt.txt
+          wc -c /tmp/prompt.txt
 
       - name: Run GH Models inference
         id: inference
@@ -74,7 +64,7 @@ jobs:
         with:
           model: openai/gpt-4o
           prompt-file: /tmp/prompt.txt
-          max-tokens: 4000
+          max-tokens: 800
 
       - name: Save review markdown
         run: |
@@ -86,6 +76,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gh-models-review-pr-${{ github.event.pull_request.number }}
-          path: /tmp/review.md
+          path: |
+            /tmp/review.md
+            /tmp/prompt.txt
+            /tmp/pr.stat
           retention-days: 14
           if-no-files-found: warn
