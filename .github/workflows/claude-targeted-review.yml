@@ -1,0 +1,137 @@
+name: Claude Targeted Review
+
+# Maps changed files to relevant numba.tests modules, then runs
+# only those tests. Records exact command + output. No PR comments.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  claude-targeted-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute PR diff
+        run: |
+          git diff "origin/${{ github.base_ref }}...HEAD" > /tmp/pr.diff
+          git diff "origin/${{ github.base_ref }}...HEAD" --name-only > /tmp/pr.files
+          wc -l /tmp/pr.diff /tmp/pr.files
+
+      - name: Install miniconda
+        run: buildscripts/incremental/install_miniconda.sh
+
+      - name: Setup conda env
+        env:
+          PYTHON: '3.11'
+          NUMPY: '1.26'
+          CONDA_ENV: azure_ci
+        run: |
+          export PATH=$HOME/miniconda3/bin:$PATH
+          buildscripts/incremental/setup_conda_environment.sh
+          source $HOME/miniconda3/etc/profile.d/conda.sh
+          conda activate $CONDA_ENV
+          # gitpython is required by `numba.runtests -g`; not strictly needed
+          # here but cheap to have
+          pip install gitpython
+
+      - name: Build numba in place
+        env:
+          CONDA_ENV: azure_ci
+        run: |
+          export PATH=$HOME/miniconda3/bin:$PATH
+          source $HOME/miniconda3/etc/profile.d/conda.sh
+          conda activate $CONDA_ENV
+          buildscripts/incremental/build.sh
+
+      - name: Export conda env path for Claude steps
+        run: |
+          echo "$HOME/miniconda3/envs/azure_ci/bin" >> "$GITHUB_PATH"
+
+      - name: Run Claude targeted review
+        id: claude
+        uses: anthropics/claude-code-base-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_tools: "View,GlobTool,GrepTool,Write,Bash(git:*),Bash(grep:*),Bash(python:*),Bash(cat:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
+          prompt: |
+            You are reviewing a numba PR. Do four steps, in order.
+            All output goes to /tmp/review.md as a single markdown document.
+            Do NOT post any comments to the PR.
+
+            # Targeted test review of PR #${{ github.event.pull_request.number }}
+
+            ## Step 1 — Changed source
+            Read /tmp/pr.files. List files outside numba/tests/ that are part
+            of the importable package (numba/**.py and numba/**.pyx). Skip
+            docs/, benchmarks/, examples/, .github/.
+
+            ## Step 2 — Test mapping
+            For each changed source file, find tests that exercise it. Use
+            grep against numba/tests/. Heuristics:
+              - module path: numba/core/typing/typeof.py → grep "from numba.core.typing.typeof" numba/tests/
+              - top-level symbol: function/class names defined in the patch hunks
+              - filename stem: typeof.py → numba/tests/test_typeof.py if exists
+            Output a markdown table:
+              | changed file | relevant test modules | reason |
+            If no tests can be mapped for a file, write that explicitly. Do
+            not silently drop it.
+
+            ## Step 3 — Test run
+            Build a single runtests invocation listing the union of mapped
+            test modules (deduped). Use this exact form:
+
+              python -m numba.runtests -b -v -m 2 -- numba.tests.test_X numba.tests.test_Y ...
+
+            Run it via Bash. Capture: exact command, exit code, last 200
+            lines of combined stdout+stderr.
+
+            ### Command
+            ```
+            <exact command you ran>
+            ```
+            ### Exit code
+            <N>
+            ### Output (tail)
+            ```
+            <last 200 lines>
+            ```
+
+            ## Step 4 — Verdict
+            - PASS if exit==0 AND at least one test ran (look for "Ran N tests" with N>0).
+            - WARN if exit==0 but 0 tests ran, or all selected tests were skipped.
+              Call this out explicitly — do not call it PASS.
+            - FAIL if exit != 0.
+            One sentence justification.
+
+      - name: Publish review to step summary
+        if: always()
+        run: |
+          if [ -s /tmp/review.md ]; then
+            cat /tmp/review.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Claude did not produce /tmp/review.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload review markdown
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-targeted-review-pr-${{ github.event.pull_request.number }}
+          path: |
+            /tmp/review.md
+            /tmp/pr.diff
+            /tmp/pr.files
+            ${{ steps.claude.outputs.execution_file }}
+          retention-days: 14
+          if-no-files-found: warn
