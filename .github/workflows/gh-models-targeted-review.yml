@@ -1,0 +1,106 @@
+name: GH Models Targeted Review
+
+# Single-shot LLM via GitHub Models. Cannot run tests.
+# Prompt uses only the changed-file list and the test-module filenames
+# (no diff body) to stay under gpt-4o's 8k-token cap.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  gh-models-targeted-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      models: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute changed files
+        run: |
+          git diff "origin/${{ github.base_ref }}...HEAD" --name-only > /tmp/pr.files
+          # Only files that look like importable numba sources (not tests,
+          # not docs, not ci). The mapping task only needs these.
+          grep -E '^numba/.*\.(py|pyx)$' /tmp/pr.files | grep -v '^numba/tests/' > /tmp/pr.src || true
+          wc -l /tmp/pr.files /tmp/pr.src
+
+      - name: List candidate test modules
+        run: |
+          # Filenames only, no path — keeps prompt small.
+          ls numba/tests/test_*.py | sed 's|.*/||;s|\.py$||' > /tmp/test_modules.txt
+          wc -l /tmp/test_modules.txt
+
+      - name: Build prompt
+        run: |
+          {
+            echo "Map changed numba source files to relevant test modules."
+            echo
+            echo "Rules:"
+            echo "- Filename stem match first (foo.py -> test_foo)."
+            echo "- Then subsystem match (numba/core/typing/* -> test_typing, test_typeof)."
+            echo "- Then semantic match (numba/typed/dictobject -> test_dictobject)."
+            echo "- If no plausible test exists, say so explicitly."
+            echo
+            echo "Changed source files:"
+            echo '```'
+            if [ -s /tmp/pr.src ]; then cat /tmp/pr.src; else echo "(none)"; fi
+            echo '```'
+            echo
+            echo "Available test modules (under numba/tests/):"
+            echo '```'
+            cat /tmp/test_modules.txt
+            echo '```'
+            echo
+            echo "Output markdown, this exact shape, no prose outside sections:"
+            echo
+            echo "# GH Models targeted review of PR #${{ github.event.pull_request.number }}"
+            echo
+            echo "## Test mapping"
+            echo "| changed file | relevant test modules | reason |"
+            echo "One row per changed file. Use dotted form numba.tests.test_X."
+            echo "If a file has no plausible test, write 'none' and a one-line reason."
+            echo
+            echo "## Recommended command"
+            echo '```'
+            echo "python -m numba.runtests -b -v -m 2 -- <space-separated dotted test modules>"
+            echo '```'
+            echo "Use the deduped union of all test modules from the table."
+            echo "If the table has zero mappings, output the comment:"
+            echo "# No targeted tests identifiable - run full sharded suite."
+            echo
+            echo "## Verdict"
+            echo "INFO if mappings produced, WARN if zero. One-sentence reason."
+          } > /tmp/prompt.txt
+          wc -c /tmp/prompt.txt
+
+      - name: Run GH Models inference
+        id: inference
+        uses: actions/ai-inference@v1
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/prompt.txt
+          max-tokens: 1500
+
+      - name: Save review markdown
+        run: |
+          printf '%s\n' "${{ steps.inference.outputs.response }}" > /tmp/review.md
+          cat /tmp/review.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload review markdown
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gh-models-targeted-review-pr-${{ github.event.pull_request.number }}
+          path: |
+            /tmp/review.md
+            /tmp/prompt.txt
+            /tmp/pr.src
+            /tmp/test_modules.txt
+          retention-days: 14
+          if-no-files-found: warn

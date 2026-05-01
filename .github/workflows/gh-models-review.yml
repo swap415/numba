@@ -1,0 +1,84 @@
+name: GH Models Silent Review
+
+# Runs a high-level review via GitHub Models (free, built-in).
+# Prompt is bullet-only and passes diffstat (not full diff) to stay
+# under the 8k-token gpt-4o cap.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  gh-models-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      models: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute diffstat
+        run: |
+          git diff "origin/${{ github.base_ref }}...HEAD" --stat=200 > /tmp/pr.stat
+          git diff "origin/${{ github.base_ref }}...HEAD" --name-only > /tmp/pr.files
+          wc -l /tmp/pr.stat /tmp/pr.files
+
+      - name: Build prompt
+        run: |
+          {
+            echo "Review a numba PR. Numba: JIT compiler for Python+NumPy."
+            echo
+            echo "You have only the diffstat, not the diff body."
+            echo
+            echo "Diffstat:"
+            echo '```'
+            cat /tmp/pr.stat
+            echo '```'
+            echo
+            echo "Output markdown, no prose outside sections, this exact shape:"
+            echo
+            echo "# GH Models review of PR #${{ github.event.pull_request.number }}"
+            echo
+            echo "## Scope"
+            echo "Two bullets: which subsystems changed (numba/core, numba/np, numba/cuda, numba/typed, numba/tests, docs, ci) and rough size (small/medium/large)."
+            echo
+            echo "## Risk areas"
+            echo "Up to 5 bullets. Each bullet: subsystem - one-line risk based on what those files typically affect."
+            echo
+            echo "## Recommended attention"
+            echo "Up to 3 bullets. What a human reviewer should focus on first."
+            echo
+            echo "## Verdict"
+            echo "One line: low-risk | medium-risk | high-risk - one-sentence reason."
+          } > /tmp/prompt.txt
+          wc -c /tmp/prompt.txt
+
+      - name: Run GH Models inference
+        id: inference
+        uses: actions/ai-inference@v1
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/prompt.txt
+          max-tokens: 800
+
+      - name: Save review markdown
+        run: |
+          printf '%s\n' "${{ steps.inference.outputs.response }}" > /tmp/review.md
+          cat /tmp/review.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload review markdown
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gh-models-review-pr-${{ github.event.pull_request.number }}
+          path: |
+            /tmp/review.md
+            /tmp/prompt.txt
+            /tmp/pr.stat
+          retention-days: 14
+          if-no-files-found: warn
