@@ -1,0 +1,91 @@
+name: GH Models Silent Review
+
+# Runs a code review via GitHub Models (free, built-in).
+# No PR comments. Emits markdown to step summary and as an artifact.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  gh-models-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      models: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute PR diff
+        id: diff
+        run: |
+          git diff "origin/${{ github.base_ref }}...HEAD" > /tmp/pr.diff
+          # Truncate to keep within model context. ~120k chars ≈ 30k tokens.
+          head -c 120000 /tmp/pr.diff > /tmp/pr.diff.trimmed
+          mv /tmp/pr.diff.trimmed /tmp/pr.diff
+          wc -l /tmp/pr.diff
+
+      - name: Build prompt
+        run: |
+          cat > /tmp/prompt.txt <<'PROMPT_EOF'
+          You are reviewing a pull request to numba, a JIT compiler for Python+NumPy.
+
+          Focus on:
+          - Numba-compatibility: NumPy arrays, no Python objects in @njit / @vectorize / @prange paths
+          - Performance regressions in hot loops; type-stability and dispatch-cost issues
+          - Correctness of numerical changes
+          - Test coverage for changed numerical paths
+
+          Output a single markdown document with this exact shape:
+
+          # GH Models review of PR #__PR__
+
+          ## Summary
+          One paragraph. What the PR does and your overall take.
+
+          ## Findings
+          For each issue use:
+            ### [severity: high | medium | low | nit] Short title
+            - File: path/to/file.py:LINE
+            - Why it matters: ...
+            - Suggestion: ...
+          Omit this section entirely if there are no findings.
+
+          ## Tests
+          One short paragraph on test coverage adequacy.
+
+          ## Verdict
+          One of: pass, warn, fail. Followed by one sentence justification.
+
+          Below is the unified diff to review:
+
+          PROMPT_EOF
+          sed -i "s/__PR__/${{ github.event.pull_request.number }}/" /tmp/prompt.txt
+          cat /tmp/pr.diff >> /tmp/prompt.txt
+
+      - name: Run GH Models inference
+        id: inference
+        uses: actions/ai-inference@v1
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/prompt.txt
+          max-tokens: 4000
+
+      - name: Save review markdown
+        run: |
+          printf '%s\n' "${{ steps.inference.outputs.response }}" > /tmp/review.md
+          cat /tmp/review.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload review markdown
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gh-models-review-pr-${{ github.event.pull_request.number }}
+          path: /tmp/review.md
+          retention-days: 14
+          if-no-files-found: warn

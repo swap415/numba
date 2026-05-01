@@ -1,7 +1,8 @@
 name: Claude Silent Review
 
 # Runs Claude as a PR check. Does not post comments.
-# Output transcript is uploaded as an artifact.
+# Emits a human-readable markdown review as an artifact and in the
+# Actions step summary.
 
 on:
   pull_request:
@@ -31,23 +32,55 @@ jobs:
         uses: anthropics/claude-code-base-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          allowed_tools: "View,GlobTool,GrepTool,Bash(git:*)"
+          allowed_tools: "View,GlobTool,GrepTool,Bash(git:*),Write"
           prompt: |
             Review the pull request diff at /tmp/pr.diff against the numba codebase.
 
             Focus on:
-            - Correctness of Numba-compatible code (NumPy arrays, no Python objects in @njit/@vectorize/@prange paths)
-            - Performance regressions in hot loops
-            - Type-stability and dispatch-cost issues
+            - Numba-compatibility: NumPy arrays, no Python objects in @njit / @vectorize / @prange paths
+            - Performance regressions in hot loops; type-stability and dispatch-cost issues
+            - Correctness of numerical changes
             - Test coverage for changed numerical paths
 
-            Do NOT post comments to the PR. Write your review to $GITHUB_STEP_SUMMARY
-            as markdown. End with a single line: VERDICT: pass | warn | fail
+            Write your review to /tmp/review.md as a single markdown document with this exact shape:
 
-      - name: Upload review transcript
+            # Claude review of PR #${{ github.event.pull_request.number }}
+
+            ## Summary
+            One paragraph. What the PR does and your overall take.
+
+            ## Findings
+            For each issue use:
+              ### [severity: high | medium | low | nit] Short title
+              - File: path/to/file.py:LINE
+              - Why it matters: ...
+              - Suggestion: ...
+            Omit this section entirely if there are no findings.
+
+            ## Tests
+            One short paragraph on test coverage adequacy.
+
+            ## Verdict
+            One of: pass, warn, fail. Followed by one sentence justification.
+
+            Do NOT post any comments to the PR. Use only the Write tool to produce /tmp/review.md.
+
+      - name: Publish review to step summary
+        if: always()
+        run: |
+          if [ -s /tmp/review.md ]; then
+            cat /tmp/review.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Claude did not produce /tmp/review.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload review markdown
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: claude-review-pr-${{ github.event.pull_request.number }}
-          path: ${{ steps.claude.outputs.execution_file }}
+          path: |
+            /tmp/review.md
+            ${{ steps.claude.outputs.execution_file }}
           retention-days: 14
+          if-no-files-found: warn
