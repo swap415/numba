@@ -11,7 +11,8 @@ from numba.core import types, utils
 from numba.core.errors import TypingError, LoweringError
 from numba.core.types.functions import _header_lead
 from numba.np.numpy_support import numpy_version
-from numba.tests.support import tag, _32bit, captured_stdout
+from numba.tests.support import (tag, _32bit, captured_stdout,
+                                 expected_failure_py315)
 
 
 # deliberately imported twice for different use cases
@@ -270,7 +271,13 @@ class TestArrayComprehension(unittest.TestCase):
         if PARALLEL_SUPPORTED:
             self.check(comp_with_array_1, 5, run_parallel=True)
 
+    @expected_failure_py315
     def test_comp_with_array_2(self):
+        # 3.15 reordered comprehension bytecode (BUILD_LIST before GET_ITER
+        # instead of after), breaking the IR pattern in
+        # numba/core/inline_closurecall.py:_inline_arraycall. Compilation
+        # is correct but the array-init optimization no longer fires, so
+        # 'allocate list' appears in the LLVM IR.
         def comp_with_array_2(n, threshold):
             A = np.arange(-n, n)
             return np.array([ x * x if x < threshold else x * 2 for x in A ])
