@@ -1,0 +1,53 @@
+name: Claude Silent Review
+
+# Runs Claude as a PR check. Does not post comments.
+# Output transcript is uploaded as an artifact.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  claude-silent-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute PR diff
+        run: |
+          git diff "origin/${{ github.base_ref }}...HEAD" > /tmp/pr.diff
+          wc -l /tmp/pr.diff
+
+      - name: Run Claude review
+        id: claude
+        uses: anthropics/claude-code-base-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_tools: "View,GlobTool,GrepTool,Bash(git:*)"
+          prompt: |
+            Review the pull request diff at /tmp/pr.diff against the numba codebase.
+
+            Focus on:
+            - Correctness of Numba-compatible code (NumPy arrays, no Python objects in @njit/@vectorize/@prange paths)
+            - Performance regressions in hot loops
+            - Type-stability and dispatch-cost issues
+            - Test coverage for changed numerical paths
+
+            Do NOT post comments to the PR. Write your review to $GITHUB_STEP_SUMMARY
+            as markdown. End with a single line: VERDICT: pass | warn | fail
+
+      - name: Upload review transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-review-pr-${{ github.event.pull_request.number }}
+          path: ${{ steps.claude.outputs.execution_file }}
+          retention-days: 14
