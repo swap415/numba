@@ -27,16 +27,25 @@ concurrency:
   group: ${{ github.workflow }}-${{ inputs.tag || github.sha }}
   cancel-in-progress: true
 
+permissions:
+  contents: read   # least-privilege default; jobs override as needed
+  actions: read    # for find/download of artifacts from prior workflow runs
+
 jobs:
   find-workflow-runs:
     name: Find Workflow Runs
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read   # gh api needs to list workflow runs by tag
     outputs:
       conda_run_ids: ${{ steps.find-runs.outputs.conda_run_ids }}
       wheel_run_ids: ${{ steps.find-runs.outputs.wheel_run_ids }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -47,16 +56,17 @@ jobs:
         id: find-runs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUTS_TAG: ${{ inputs.tag }}
         run: |
-          TAG="${{ inputs.tag }}"
+          TAG="${INPUTS_TAG}"
           if [ -z "$TAG" ]; then
             echo "Error: tag input is required"
             exit 1
           fi
           output=$(./buildscripts/github/find_workflow_runs.py \
             --tag "$TAG" \
-            --repo ${{ github.repository }} \
-            --token "${{ secrets.GITHUB_TOKEN }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --token "$GH_TOKEN" \
             --config ./buildscripts/github/workflow_groups.json)
           echo "$output" >> $GITHUB_OUTPUT
 
@@ -64,10 +74,15 @@ jobs:
     name: Download Artifacts
     needs: find-workflow-runs
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read   # download-artifact uses GH API to pull from prior runs
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -77,21 +92,23 @@ jobs:
       - name: Download conda packages
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEEDS_FIND_WORKFLOW_RUNS_OUTPUTS_CONDA_RUN_IDS: ${{ needs.find-workflow-runs.outputs.conda_run_ids }}
         run: |
           ./buildscripts/github/download_artifacts.py \
-            --run-ids ${{ needs.find-workflow-runs.outputs.conda_run_ids }} \
-            --repo ${{ github.repository }} \
-            --token "${{ secrets.GITHUB_TOKEN }}" \
+            --run-ids ${NEEDS_FIND_WORKFLOW_RUNS_OUTPUTS_CONDA_RUN_IDS} \
+            --repo "$GITHUB_REPOSITORY" \
+            --token "$GH_TOKEN" \
             --output-dir conda_packages
 
       - name: Download wheels
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEEDS_FIND_WORKFLOW_RUNS_OUTPUTS_WHEEL_RUN_IDS: ${{ needs.find-workflow-runs.outputs.wheel_run_ids }}
         run: |
           ./buildscripts/github/download_artifacts.py \
-            --run-ids ${{ needs.find-workflow-runs.outputs.wheel_run_ids }} \
-            --repo ${{ github.repository }} \
-            --token "${{ secrets.GITHUB_TOKEN }}" \
+            --run-ids ${NEEDS_FIND_WORKFLOW_RUNS_OUTPUTS_WHEEL_RUN_IDS} \
+            --repo "$GITHUB_REPOSITORY" \
+            --token "$GH_TOKEN" \
             --output-dir dist
 
       - name: List downloaded conda packages
@@ -145,7 +162,8 @@ jobs:
       name: testpypi
       url: https://test.pypi.org/p/numba
     permissions:
-      id-token: write
+      id-token: write   # required for PyPI trusted publishing (OIDC)
+      contents: read
 
     steps:
       - name: Download wheels artifact
@@ -176,7 +194,8 @@ jobs:
       name: pypi
       url: https://pypi.org/p/numba
     permissions:
-      id-token: write
+      id-token: write   # required for PyPI trusted publishing (OIDC)
+      contents: read
 
     steps:
       - name: Download wheels artifact
@@ -201,6 +220,12 @@ jobs:
     name: Publish to Anaconda.org
     needs: download-artifacts
     runs-on: ubuntu-latest
+    # GitHub environment gates access to ANACONDA_ORG_GITHUB_NUMBA_UPLOAD
+    # the "anaconda-org" environment must exist in repo Settings -> Environments
+    environment:
+      name: anaconda-org
+    permissions:
+      contents: read
     env:
       ANACONDA_USER: numba
       ANACONDA_LABEL: ${{ inputs.anaconda_label || 'dev' }}
@@ -252,28 +277,30 @@ jobs:
       - name: Publish conda packages to Anaconda.org
         env:
           ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_ORG_GITHUB_NUMBA_UPLOAD }}
+          INPUTS_COPY_CONDA_TO_MAIN: ${{ inputs.copy_conda_to_main }}
         run: |
-          LABELS="-l ${{ env.ANACONDA_LABEL }}"
-          if [ "${{ inputs.copy_conda_to_main }}" = "true" ]; then
+          LABELS="-l ${ANACONDA_LABEL}"
+          if [ "${INPUTS_COPY_CONDA_TO_MAIN}" = "true" ]; then
             LABELS="$LABELS -l main"
           fi
-          echo "Publishing conda packages to: ${{ env.ANACONDA_USER }} with labels: $LABELS"
+          echo "Publishing conda packages to: ${ANACONDA_USER} with labels: $LABELS"
           find conda_packages -name "*.conda" -type f | while read -r pkg; do
             echo "Uploading: $pkg"
-            anaconda -t "$ANACONDA_API_TOKEN" upload --force -u ${{ env.ANACONDA_USER }} $LABELS "$pkg"
+            anaconda -t "$ANACONDA_API_TOKEN" upload --force -u "${ANACONDA_USER}" $LABELS "$pkg"
           done
 
       - name: Publish wheels to Anaconda.org
         env:
           ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_ORG_GITHUB_NUMBA_UPLOAD }}
+          INPUTS_COPY_CONDA_TO_MAIN: ${{ inputs.copy_conda_to_main }}
         run: |
-          LABELS="-l ${{ env.ANACONDA_LABEL }}"
-          if [ "${{ inputs.copy_conda_to_main }}" = "true" ]; then
+          LABELS="-l ${ANACONDA_LABEL}"
+          if [ "${INPUTS_COPY_CONDA_TO_MAIN}" = "true" ]; then
             LABELS="$LABELS -l main"
           fi
-          echo "Publishing wheels to: ${{ env.ANACONDA_USER }} with labels: $LABELS"
+          echo "Publishing wheels to: ${ANACONDA_USER} with labels: $LABELS"
           find dist -name "*.whl" -type f | while read -r pkg; do
             echo "Uploading: $pkg"
-            anaconda -t "$ANACONDA_API_TOKEN" upload --force -u ${{ env.ANACONDA_USER }} $LABELS "$pkg"
+            anaconda -t "$ANACONDA_API_TOKEN" upload --force -u "${ANACONDA_USER}" $LABELS "$pkg"
           done
 

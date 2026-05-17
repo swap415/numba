@@ -34,14 +34,21 @@ env:
   # Set USE_TBB to true by default, only override if explicitly set to false
   USE_TBB: ${{ github.event_name == 'workflow_dispatch' && inputs.use_tbb != false || true }}
 
+permissions:
+  contents: read   # least-privilege default; jobs add more if needed
+  actions: read    # for cross-run artifact download (llvmlite)
+
 jobs:
   load-matrix:
+    name: Load workflow matrix
     runs-on: ubuntu-latest
     outputs:
       build-matrix-json: ${{ steps.load_matrix_json.outputs.build-matrix-json }}
       test-matrix-json: ${{ steps.load_matrix_json.outputs.test-matrix-json }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
       - id: load_matrix_json
         name: Load Workflow Matrix JSON
         run: |
@@ -79,6 +86,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Download llvmlite wheel
         if: inputs.llvmlite_wheel_runid != ''
@@ -91,10 +99,13 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build wheel in manylinux docker container
+        env:
+          MATRIX_PYTHON_TAG: ${{ matrix.python_tag }}
+          MATRIX_NUMPY_BUILD: ${{ matrix.numpy_build }}
         run: |
           # Construct the expected Python executable path inside the container
           # For free-threaded builds (e.g. cp314t), the manylinux path is cp314-cp314t
-          TAG="${{ matrix.python_tag }}"
+          TAG="${MATRIX_PYTHON_TAG}"
           VER_TAG="${TAG%t}"
           PYTHON_EXECUTABLE="/opt/python/${VER_TAG}-${TAG}/bin/python"
           echo "Using Python executable: $PYTHON_EXECUTABLE"
@@ -104,12 +115,12 @@ jobs:
 
           # Run the build script inside Docker container
           docker run --rm \
-            -v ${{ github.workspace }}:/io \
+            -v ${GITHUB_WORKSPACE}:/io \
             quay.io/pypa/manylinux2014_x86_64 \
             bash /io/buildscripts/github/build_wheel_linux.sh \
             "${PYTHON_EXECUTABLE}" \
             "${USE_TBB}" \
-            "${{ matrix.numpy_build }}" \
+            "${MATRIX_NUMPY_BUILD}" \
             "/io/llvmlite_wheels" \
             "${WHEELS_INDEX_URL}"
 
@@ -117,17 +128,19 @@ jobs:
           ls -la wheelhouse/
 
       - name: Repair and patch wheel in manylinux docker container
+        env:
+          MATRIX_PYTHON_TAG: ${{ matrix.python_tag }}
         run: |
           # Construct the expected Python executable path inside the container
           # For free-threaded builds (e.g. cp314t), the manylinux path is cp314-cp314t
-          TAG="${{ matrix.python_tag }}"
+          TAG="${MATRIX_PYTHON_TAG}"
           VER_TAG="${TAG%t}"
           PYTHON_EXECUTABLE="/opt/python/${VER_TAG}-${TAG}/bin/python"
           echo "Using Python executable: $PYTHON_EXECUTABLE"
 
           # Run the repair script in Docker
           docker run --rm \
-            -v ${{ github.workspace }}:/io \
+            -v ${GITHUB_WORKSPACE}:/io \
             quay.io/pypa/manylinux2014_x86_64 \
             bash /io/buildscripts/github/repair_wheel_linux.sh \
             "$PYTHON_EXECUTABLE" \
@@ -185,18 +198,22 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Validate and test wheel
+        env:
+          MATRIX_PYTHON_CANONICAL: ${{ matrix.python_canonical }}
+          MATRIX_NUMPY_TEST: ${{ matrix.numpy_test }}
+          INPUTS_LLVMLITE_WHEEL_RUNID: ${{ inputs.llvmlite_wheel_runid }}
         run: |
-          PYTHON_PATH=$(which python${{ matrix.python_canonical }})
+          PYTHON_PATH=$(which "python${MATRIX_PYTHON_CANONICAL}")
           $PYTHON_PATH -m pip install --upgrade pip twine
           ls -l dist
-          if [ "${{ inputs.llvmlite_wheel_runid }}" != "" ]; then
+          if [ "${INPUTS_LLVMLITE_WHEEL_RUNID}" != "" ]; then
               $PYTHON_PATH -m pip install --no-cache-dir llvmlite_wheels/*.whl
           else
               $PYTHON_PATH -m pip install --no-cache-dir --pre -i $WHEELS_INDEX_URL llvmlite
           fi
           $PYTHON_PATH -m twine check dist/*.whl
 
-          $PYTHON_PATH -m pip install dist/numba*.whl numpy==${{ matrix.numpy_test }} setuptools
+          $PYTHON_PATH -m pip install dist/numba*.whl "numpy==${MATRIX_NUMPY_TEST}" setuptools
 
           if [ "$USE_TBB" = "true" ]; then
             $PYTHON_PATH -m pip install tbb
