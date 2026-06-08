@@ -1470,11 +1470,6 @@ class _LoopTypesTester(TestCase):
         skip_types = getattr(self, '_skip_types', [])
         if any(l in skip_types for l in letter_types):
             return
-        # skip specific (ufunc, loop) combinations that NumPy provides but
-        # numba does not implement.
-        skip_loops = getattr(self, '_skip_loops', {})
-        if loop in skip_loops.get(ufunc.__name__, ()):
-            return
         # if the test case requires some types to be present, skip loops
         # not involving any of those types.
         required_types = getattr(self, '_required_types', [])
@@ -1728,10 +1723,6 @@ class TestLoopTypesDatetime(_LoopTypesTester):
 
     # Test datetime64 and timedelta64 types.
     _required_types = 'mM'
-
-    # NumPy 2.5 added a sign(timedelta64) -> float64 loop ('m->d') that numba
-    # does not implement.
-    _skip_loops = {'sign': {'m->d'}}
 
     # Test various units combinations (TestLoopTypes is only able to test
     # homogeneous units).

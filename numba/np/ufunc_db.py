@@ -1127,6 +1127,12 @@ def _fill_ufunc_db(ufunc_db):
     ufunc_db[np.sign].update({
         'm->m': npdatetime.timedelta_sign_impl,
     })
+    if numpy_version >= (2, 5):
+        # NumPy 2.5 replaced the timedelta64 sign loop 'm->m' (returning a
+        # timedelta64) with 'm->d' (returning a float64, NaT -> NaN).
+        ufunc_db[np.sign].update({
+            'm->d': npdatetime.timedelta_sign_to_float_impl,
+        })
     ufunc_db[np.add].update({
         'mm->m': npdatetime.timedelta_add_impl,
         'Mm->M': npdatetime.datetime_plus_timedelta,

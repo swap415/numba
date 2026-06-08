@@ -5702,9 +5702,9 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
         ]
         if numpy_version < (2, 5):
             # NumPy 2.5 removed support for 2-element (2D) input vectors in
-            # np.cross. Numba still accepts them (treating the missing third
-            # component as 0), but these cases can only be cross-checked against
-            # the reference np.cross on NumPy < 2.5.
+            # np.cross, and numba matches that (these inputs now raise, see
+            # test_cross_exceptions). The value comparison below therefore only
+            # applies on NumPy < 2.5.
             pairs += [
                 # 2x3 array-like (n-dims)
                 (
@@ -5750,10 +5750,18 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
                 np.array((1, 2)),
                 np.array((3, 4))
             )
-        self.assertIn(
-            'Dimensions for both inputs is 2.',
-            str(raises.exception)
-        )
+        if numpy_version < (2, 5):
+            self.assertIn(
+                'Dimensions for both inputs is 2.',
+                str(raises.exception)
+            )
+        else:
+            # NumPy 2.5 removed 2D vectors from np.cross; numba now rejects
+            # them to match.
+            self.assertIn(
+                'dimension must be 3',
+                str(raises.exception)
+            )
 
         self.assertIn(
             '`cross2d(a, b)` from `numba.np.extensions`.',
@@ -5771,16 +5779,22 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
             str(raises.exception)
         )
 
-        # test 2d cross product error for ndim == 1
+        # test 2d cross product error for ndim > 1
         with self.assertRaises(ValueError) as raises:
             cfunc(
                 np.arange(8).reshape((4, 2)),
                 np.arange(8)[::-1].reshape((4, 2))
             )
-        self.assertIn(
-            'Dimensions for both inputs is 2',
-            str(raises.exception)
-        )
+        if numpy_version < (2, 5):
+            self.assertIn(
+                'Dimensions for both inputs is 2',
+                str(raises.exception)
+            )
+        else:
+            self.assertIn(
+                'dimension must be 3',
+                str(raises.exception)
+            )
 
         # test non-array-like input
         with self.assertRaises(TypingError) as raises:

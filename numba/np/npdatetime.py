@@ -181,6 +181,34 @@ def timedelta_sign_impl(context, builder, sig, args):
     return impl_ret_untracked(context, builder, sig.return_type, res)
 
 
+def timedelta_sign_to_float_impl(context, builder, sig, args):
+    """
+    np.sign(timedelta64) -> float64
+
+    NumPy 2.5 changed the np.sign timedelta64 loop from 'm->m' (returning a
+    timedelta64) to 'm->d' (returning a float64), mapping NaT to NaN.
+    """
+    val, = args
+    fltty = context.get_value_type(sig.return_type)
+    ret = cgutils.alloca_once(builder, fltty, name='ret')
+    builder.store(Constant(fltty, float('nan')), ret)
+    zero = Constant(TIMEDELTA64, 0)
+    with cgutils.if_likely(builder, is_not_nat(builder, val)):
+        with builder.if_else(builder.icmp_signed('>', val, zero)
+                             ) as (gt_zero, le_zero):
+            with gt_zero:
+                builder.store(Constant(fltty, 1.0), ret)
+            with le_zero:
+                with builder.if_else(builder.icmp_signed('==', val, zero)
+                                     ) as (eq_zero, lt_zero):
+                    with eq_zero:
+                        builder.store(Constant(fltty, 0.0), ret)
+                    with lt_zero:
+                        builder.store(Constant(fltty, -1.0), ret)
+    res = builder.load(ret)
+    return impl_ret_untracked(context, builder, sig.return_type, res)
+
+
 @lower_builtin(operator.add, *TIMEDELTA_BINOP_SIG)
 @lower_builtin(operator.iadd, *TIMEDELTA_BINOP_SIG)
 def timedelta_add_impl(context, builder, sig, args):
