@@ -57,7 +57,7 @@ These remove symbols/behaviour outright and break at import or call time.
 | 1 | `linalg.eig` / `eigvals` **always return complex** (gh-30411) | **Significant.** Numba's `eig_impl`/`eigvals_impl` use `real_eig_impl` for real input: they returned **real** arrays when all eigenvalues are real, and **raised** when any eigenvalue is complex (Numba can't change return type at runtime). NumPy 2.5 removes the dynamic typing — eig is now statically complex. | On `ver >= (2,5)`, `real_eig_impl_always_complex` / `real_eigvals_impl_always_complex` assemble complex eigenvalues (`complex(wr, wi)`) and unpack LAPACK's packed complex-conjugate eigenvectors. Matches NumPy 2.5 **and** removes the "domain change" limitation. `test_linalg` domain-change block version-gated. | ✅ Done (source) |
 | 2 | BTPE binomial Stirling-series fix (gh-31238); `Generator.binomial` / `Generator.multinomial` streams change. Legacy `RandomState` is intentionally **unchanged**. | Numba's `np/random/distributions.py::random_binomial_btpe` was a port of NumPy's *old* (buggy) BTPE and drives `Generator.binomial` (Numba does **not** implement `Generator.multinomial`). Inherited bugs: leading coeff `13680` (vs `13860`), 3rd/4th terms added (vs subtracted), `w` divisor `66320.` (vs `166320.`). | Added version-gated `_binomial_btpe_stirling` helper: corrected series on `ver >= (2,5)`, original on `< (2,5)` (keeps stream parity with older NumPy + legacy `RandomState`, which NumPy never corrected). Now matches NumPy 2.5 `Generator.binomial` bit-for-bit (0/500 fuzz divergence). Added regression subtest for the squeeze region. | ✅ Done (source) |
 | 3 | `datetime64`/`timedelta64` overflow → `OverflowError` (gh-31378) | Numba deliberately uses C wraparound for **all** integer (incl. timedelta) arithmetic and does no overflow checking (performance); this is a documented, pervasive divergence, not datetime-specific. Object-mode tests defer to NumPy and now see the raise. | Keep Numba's wraparound semantics. Tests: skip the overflowing `astype` in `test_comparisons`; only run the overflow-wraparound `test_mul` case where it still applies (nopython still wraps). Document the divergence. | ✅ Done (test) — design decision: do **not** add overflow checks |
-| 4 | `np.where` no longer truncates Python ints → `OverflowError` (gh-30803) | Numba's `np.where` overloads operate on typed values; out-of-range Python-int truncation isn't really expressible the same way. Low risk. | Verify `np.where` with scalar branches on 2.5; adapt a test only if one trips. | 🔎 Investigate |
+| 4 | `np.where` no longer truncates Python ints → `OverflowError` (gh-30803) | Verified: in-range scalars match NumPy. An out-of-`int64` Python literal (e.g. `2**70`) is wrapped by Numba's *general* integer-literal handling (not `where`-specific) — the same no-overflow-check stance as the datetime decision (§2.3). NumPy now raises. | None — consistent, documented Numba divergence; aligning only `where` would be inconsistent. | ➖ No impact (verified) |
 | 5 | `from_dlpack` raises `BufferError` (was `RuntimeError`) (gh-30937) | Affects Numba's DLPack interop (CUDA / `__dlpack__`). Error-type only. | Check Numba's dlpack import paths/tests for `RuntimeError` expectations; relax to `BufferError` where 2.5 is in play (likely CUDA-only, untested here). | 🔎 Investigate (CUDA) |
 | 6 | Default memory allocator → `PyMem_RawMalloc/Free` (gh-30846, gh-31503) | NumPy arrays handed to Numba use a different allocator; Numba's NRT manages its own memory. Should be transparent. | None expected; watch for NRT/`tracemalloc`-related test assumptions. | ➖ No impact (verify) |
 | 7 | MSVC ≥ 19.35 required (gh-30489) | Windows build toolchain only. | Ensure Windows CI uses VS 2022 ≥ 17.5; no code change. | ➖ Build infra |
@@ -70,7 +70,7 @@ These remove symbols/behaviour outright and break at import or call time.
 | # | NumPy change (gh) | Numba impact | Action | Status |
 |---|---|---|---|---|
 | 1 | `generic` unit for `timedelta64` deprecated; incl. implicit bare-int conversion (gh-29619) | **Import-time trigger fixed.** `npdatetime_helpers.py` built `NAT` via `np.timedelta64('nat')` (generic unit) at module load → `import numba` failed under `-W error::DeprecationWarning` on 2.5. The only unit-less construction in Numba *source*. Test helpers (`TD = np.timedelta64`) still construct generic units → non-fatal warnings. | Use an explicit unit for `NAT` (`np.timedelta64('nat', 's')`; the int repr `INT64_MIN` is unit-independent). Import is now clean. Test-level generic units left as future cleanup (non-fatal; Numba must keep modelling the generic unit while NumPy still supports it). | ✅ Done (source, import-time) |
-| 2 | Non-integer inputs to `tri`/`triu_indices`/`tril_indices`(+`_from`) deprecated (gh-30869) | Numba reimplements `np.tri`, `np.tril_indices(_from)`, `np.triu_indices(_from)`. If Numba's impls accept/produce float `N/M/k`, they should mirror the deprecation. | Verify Numba's impls require integer `N/M/k`; align with NumPy (reject/deprecate non-integer). Also pick up "**`triu_indices` now accepts unsigned ints**" (Changes §5). | 🔎 Investigate |
+| 2 | Non-integer inputs to `tri`/`triu_indices`/`tril_indices`(+`_from`) deprecated (gh-30869) | Numba already **rejects** float `N/M/k` with a `TypingError` (stricter than NumPy's deprecation) **and** already accepts unsigned ints. Already aligned with NumPy 2.5's direction on both counts. | None. | ➖ No impact (verified) |
 | 3 | `numpy.take` casting-rule fix for `out=` (gh-30615) | Numba's `np.take` (`numpy_take(a, indices, axis=None)`) has **no `out=`**, so the rule change is moot. | None. | ➖ No impact |
 | 4 | `numpy.fix` deprecated in favour of `numpy.trunc` (gh-30644) | No `overload(np.fix)` in Numba source. Tests may call `np.fix`. | None for source; gate any test that calls `np.fix` on 2.5 if it warns. | ➖ No impact (verify) |
 | 5 | Setting `dtype` attribute deprecated (gh-29244) | Can't set `.dtype` in nopython; host-side Numba code doesn't do `arr.dtype = ...`. | None. | ➖ No impact |
@@ -233,8 +233,25 @@ PR #10393 (NumPy 2.4), PR #10147 (NumPy 2.3).
 - Tests: `searchsorted` unsorted cross-checks gated; datetime overflow,
   `'a'` dtype alias, `row_stack` usecase gated.
 
+### 2026-06-08 — Verified no-impact items
+
+- **`tri`/`triu_indices`/`tril_indices` (gh-30869).** Numba already rejects
+  float `N/M/k` (`TypingError`, stricter than NumPy's new deprecation) and
+  already accepts unsigned ints — aligned with 2.5 on both counts. No change.
+- **`np.where` Python-int overflow (gh-30803).** In-range scalars match NumPy;
+  an out-of-`int64` literal is wrapped by Numba's general integer-literal
+  handling (not `where`-specific), consistent with the datetime no-overflow
+  stance. No change.
+- **record-dtype `memcpy`/padding (gh-29270).** `test_record_dtype` /
+  `test_recarray_usecases` pass on 2.5; no observable impact.
+
 ### Next up
 
-1. (Investigate) `tri`/`triu_indices`/`tril_indices` non-integer + unsigned-int.
-2. (Optional, deferred) `descending=` for `np.sort`/`np.argsort` (gh-31345).
-3. (Verify) `np.where` Python-int overflow, record-dtype padding edge cases.
+All actionable NumPy 2.5 items from the analysis are now either implemented or
+verified as no-impact. Remaining (lower priority):
+
+1. (Optional, deferred) `descending=` for `np.sort`/`np.argsort` (gh-31345) —
+   full typing+lowering feature; scoped in the journal above.
+2. (CUDA, untested here) `from_dlpack` `RuntimeError` → `BufferError` (gh-30937).
+3. Test-hygiene: move datetime tests off the generic `timedelta64` unit before
+   NumPy turns the deprecation into an error.
