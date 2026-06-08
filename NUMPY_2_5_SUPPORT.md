@@ -69,7 +69,7 @@ These remove symbols/behaviour outright and break at import or call time.
 
 | # | NumPy change (gh) | Numba impact | Action | Status |
 |---|---|---|---|---|
-| 1 | `generic` unit for `timedelta64` deprecated; incl. implicit bare-int conversion (gh-29619) | **Broad.** Numba's datetime/timedelta support models the unit-less ("generic") `timedelta64`/`datetime64`, and the test suite uses `TD(1)` / `DT(0)` (no unit) heavily. Running on 2.5 emits many `DeprecationWarning`s; the unit will eventually become an error. | Audit `np/npdatetime*.py` and datetime tests for unit-less construction. Short term: ensure warnings don't fail tests. Medium term: move tests to explicit units and decide whether Numba keeps modelling the generic unit (it must while NumPy still supports it for back-compat). | 🔎 Investigate (broad) |
+| 1 | `generic` unit for `timedelta64` deprecated; incl. implicit bare-int conversion (gh-29619) | **Import-time trigger fixed.** `npdatetime_helpers.py` built `NAT` via `np.timedelta64('nat')` (generic unit) at module load → `import numba` failed under `-W error::DeprecationWarning` on 2.5. The only unit-less construction in Numba *source*. Test helpers (`TD = np.timedelta64`) still construct generic units → non-fatal warnings. | Use an explicit unit for `NAT` (`np.timedelta64('nat', 's')`; the int repr `INT64_MIN` is unit-independent). Import is now clean. Test-level generic units left as future cleanup (non-fatal; Numba must keep modelling the generic unit while NumPy still supports it). | ✅ Done (source, import-time) |
 | 2 | Non-integer inputs to `tri`/`triu_indices`/`tril_indices`(+`_from`) deprecated (gh-30869) | Numba reimplements `np.tri`, `np.tril_indices(_from)`, `np.triu_indices(_from)`. If Numba's impls accept/produce float `N/M/k`, they should mirror the deprecation. | Verify Numba's impls require integer `N/M/k`; align with NumPy (reject/deprecate non-integer). Also pick up "**`triu_indices` now accepts unsigned ints**" (Changes §5). | 🔎 Investigate |
 | 3 | `numpy.take` casting-rule fix for `out=` (gh-30615) | Numba's `np.take` (`numpy_take(a, indices, axis=None)`) has **no `out=`**, so the rule change is moot. | None. | ➖ No impact |
 | 4 | `numpy.fix` deprecated in favour of `numpy.trunc` (gh-30644) | No `overload(np.fix)` in Numba source. Tests may call `np.fix`. | None for source; gate any test that calls `np.fix` on 2.5 if it warns. | ➖ No impact (verify) |
@@ -151,6 +151,32 @@ These remove symbols/behaviour outright and break at import or call time.
 
 > Running dev log (most recent first).
 
+### 2026-06-08 — `timedelta64` generic-unit deprecation: fix import-time trigger (gh-29619)
+
+- **Investigation.** Under `-W error::DeprecationWarning` on NumPy 2.5,
+  `import numba` *failed*: `npdatetime_helpers.py` set
+  `NAT = np.timedelta64('nat').astype(np.int64)` at module load, and the
+  unit-less ("generic") construction is deprecated in 2.5. Grep confirmed this
+  is the only unit-less `np.timedelta64`/`np.datetime64` in Numba source (the
+  `builtins.py` hit is a comment). Verified NaT's integer value
+  (`INT64_MIN = -9223372036854775808`) is identical for any unit.
+- **Implementation.** `NAT = np.timedelta64('nat', 's').astype(np.int64)` — an
+  explicit unit, no version gate needed (valid on all NumPy versions).
+- **Verification.** `import numba`, `njit` datetime arithmetic, and reading
+  `NAT` are all clean under `-W error::DeprecationWarning`; `NAT` unchanged.
+- **Deferred.** Test helpers (`TD = np.timedelta64`) construct generic-unit
+  values in many places → non-fatal warnings only (runner doesn't escalate).
+  Left as future cleanup; Numba must keep modelling the generic unit while
+  NumPy still supports it for back-compat.
+
+### 2026-06-08 — Scoping note: `descending=` sort (gh-31345) deferred
+
+- `np.sort`/`np.argsort` gained `descending=True` in 2.5. `np.sort` has a clean
+  `@overload` seam, but `np.argsort` and the `ndarray.sort`/`argsort` methods
+  need coordinated typing (`arraydecl.py`) + lowering (`arrayobj.py`) +
+  comparator changes. As an *optional* new feature touching heavily-used sort
+  paths, it's deferred to a dedicated change rather than landed half-complete.
+
 ### 2026-06-08 — `Generator.binomial` BTPE Stirling-series fix (gh-31238)
 
 - **Investigation.** Read NumPy 2.5.0rc1's corrected `random_binomial_btpe`
@@ -209,6 +235,6 @@ PR #10393 (NumPy 2.4), PR #10147 (NumPy 2.3).
 
 ### Next up
 
-1. (Optional) `descending=` for `np.sort`/`np.argsort` (gh-31345).
-2. (Investigate) `timedelta64` generic-unit deprecation surface.
-3. (Investigate) `tri`/`triu_indices`/`tril_indices` non-integer + unsigned.
+1. (Investigate) `tri`/`triu_indices`/`tril_indices` non-integer + unsigned-int.
+2. (Optional, deferred) `descending=` for `np.sort`/`np.argsort` (gh-31345).
+3. (Verify) `np.where` Python-int overflow, record-dtype padding edge cases.

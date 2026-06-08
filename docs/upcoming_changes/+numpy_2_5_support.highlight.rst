@@ -21,6 +21,10 @@ Numba now supports NumPy 2.5, with the following notable changes:
   sampler, so for a given ``BitGenerator`` seed it returns the same samples as
   NumPy 2.5. The legacy ``numpy.random.binomial`` stream is unchanged.
 
+- Importing Numba no longer triggers NumPy 2.5's deprecation warning for the
+  "generic" ``timedelta64`` unit (the internal ``NaT`` constant now uses an
+  explicit unit).
+
 - ``np.searchsorted`` results for input arrays that are not sorted (an
   undefined case in NumPy) may differ from NumPy 2.5 due to NumPy's new batched
   binary search. Results for correctly sorted input are unaffected.
