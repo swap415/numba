@@ -151,6 +151,14 @@ These remove symbols/behaviour outright and break at import or call time.
 
 > Running dev log (most recent first).
 
+### 2026-06-08 — Full regression of touched modules
+
+- `test_linalg`, `test_np_randomgen`, `test_random`, `test_npdatetime`,
+  `test_np_functions`, `test_ufuncs`: **4769 passed**, 20 skipped, 0 failures
+  (Python 3.12, NumPy 2.5.0rc1, llvmlite 0.48.0rc1, scipy 1.18.0rc1).
+- All NumPy 2.5 source changes (eig/eigvals always-complex, binomial Stirling,
+  timedelta NaT unit, cross, sign, row_stack) confirmed coherent.
+
 ### 2026-06-08 — `timedelta64` generic-unit deprecation: fix import-time trigger (gh-29619)
 
 - **Investigation.** Under `-W error::DeprecationWarning` on NumPy 2.5,
