@@ -1258,6 +1258,24 @@ class TestRandomGenerators(MemoryLeakMixin, TestCase):
             expected = foo.py_func(gen2)
             self.assertPreciseEqual(got, expected)
 
+        with self.subTest("BTPE Stirling-series squeeze region gh-31238"):
+            # Large n with p ~ 0.5 exercises the BTPE squeezing acceptance
+            # test (|y - m| > 20), where NumPy 2.5 corrected two errors in the
+            # Stirling series. numba's Generator.binomial must match the
+            # installed NumPy's stream (the version-gated correction lives in
+            # numba.np.random.distributions._binomial_btpe_stirling).
+
+            gen1 = np.random.default_rng(911743)
+            gen2 = np.random.default_rng(911743)
+
+            @numba.jit
+            def foo(gen):
+                return gen.binomial(2223, 0.461, 200)
+
+            got = foo(gen1)
+            expected = foo.py_func(gen2)
+            self.assertPreciseEqual(got, expected)
+
 
 class TestGeneratorCaching(TestCase, SerialMixin):
     def test_randomgen_caching(self):

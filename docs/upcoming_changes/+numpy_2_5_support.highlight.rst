@@ -17,6 +17,10 @@ Numba now supports NumPy 2.5, with the following notable changes:
 - ``np.sign`` of a ``timedelta64`` now returns a ``float64`` (``NaT`` maps to
   ``NaN``), matching the new NumPy 2.5 ufunc loop.
 
+- ``numpy.random.Generator.binomial`` now matches NumPy 2.5's corrected BTPE
+  sampler, so for a given ``BitGenerator`` seed it returns the same samples as
+  NumPy 2.5. The legacy ``numpy.random.binomial`` stream is unchanged.
+
 - ``np.searchsorted`` results for input arrays that are not sorted (an
   undefined case in NumPy) may differ from NumPy 2.5 due to NumPy's new batched
   binary search. Results for correctly sorted input are unaffected.

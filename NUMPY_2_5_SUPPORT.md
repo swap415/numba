@@ -55,7 +55,7 @@ These remove symbols/behaviour outright and break at import or call time.
 | # | NumPy change (gh) | Numba impact | Action | Status |
 |---|---|---|---|---|
 | 1 | `linalg.eig` / `eigvals` **always return complex** (gh-30411) | **Significant.** Numba's `eig_impl`/`eigvals_impl` use `real_eig_impl` for real input: they returned **real** arrays when all eigenvalues are real, and **raised** when any eigenvalue is complex (Numba can't change return type at runtime). NumPy 2.5 removes the dynamic typing — eig is now statically complex. | On `ver >= (2,5)`, `real_eig_impl_always_complex` / `real_eigvals_impl_always_complex` assemble complex eigenvalues (`complex(wr, wi)`) and unpack LAPACK's packed complex-conjugate eigenvectors. Matches NumPy 2.5 **and** removes the "domain change" limitation. `test_linalg` domain-change block version-gated. | ✅ Done (source) |
-| 2 | BTPE binomial Stirling-series fix (gh-31238); `Generator.binomial` / `Generator.multinomial` streams change. Legacy `RandomState` is intentionally **unchanged**. | Numba's `np/random/distributions.py::random_binomial_btpe` is a port of NumPy's *old* (buggy) BTPE and drives `Generator.binomial` (Numba does **not** implement `Generator.multinomial`). The Stirling acceptance test (case 52, ~L682–691) shows the inherited bug: the `w` term divides by `66320.` while the other three use `166320.`; per gh-31238 the leading coefficient should be `13860` (not `13680`) and the 3rd/4th terms' signs are corrected. Legacy `np.random.binomial` lives separately in `cpython/randomimpl.py` and must stay as-is. | On `ver >= (2,5)`, reconcile `random_binomial_btpe` with NumPy 2.5's corrected Stirling series so `Generator.binomial` matches NumPy for the same `BitGenerator` seed. **Leave the legacy path untouched.** Current spot-checks pass (the error only bites specific `n`), so add a targeted parity test for an affected `n`. | 🔧 TODO (source) + 🔎 |
+| 2 | BTPE binomial Stirling-series fix (gh-31238); `Generator.binomial` / `Generator.multinomial` streams change. Legacy `RandomState` is intentionally **unchanged**. | Numba's `np/random/distributions.py::random_binomial_btpe` was a port of NumPy's *old* (buggy) BTPE and drives `Generator.binomial` (Numba does **not** implement `Generator.multinomial`). Inherited bugs: leading coeff `13680` (vs `13860`), 3rd/4th terms added (vs subtracted), `w` divisor `66320.` (vs `166320.`). | Added version-gated `_binomial_btpe_stirling` helper: corrected series on `ver >= (2,5)`, original on `< (2,5)` (keeps stream parity with older NumPy + legacy `RandomState`, which NumPy never corrected). Now matches NumPy 2.5 `Generator.binomial` bit-for-bit (0/500 fuzz divergence). Added regression subtest for the squeeze region. | ✅ Done (source) |
 | 3 | `datetime64`/`timedelta64` overflow → `OverflowError` (gh-31378) | Numba deliberately uses C wraparound for **all** integer (incl. timedelta) arithmetic and does no overflow checking (performance); this is a documented, pervasive divergence, not datetime-specific. Object-mode tests defer to NumPy and now see the raise. | Keep Numba's wraparound semantics. Tests: skip the overflowing `astype` in `test_comparisons`; only run the overflow-wraparound `test_mul` case where it still applies (nopython still wraps). Document the divergence. | ✅ Done (test) — design decision: do **not** add overflow checks |
 | 4 | `np.where` no longer truncates Python ints → `OverflowError` (gh-30803) | Numba's `np.where` overloads operate on typed values; out-of-range Python-int truncation isn't really expressible the same way. Low risk. | Verify `np.where` with scalar branches on 2.5; adapt a test only if one trips. | 🔎 Investigate |
 | 5 | `from_dlpack` raises `BufferError` (was `RuntimeError`) (gh-30937) | Affects Numba's DLPack interop (CUDA / `__dlpack__`). Error-type only. | Check Numba's dlpack import paths/tests for `RuntimeError` expectations; relax to `BufferError` where 2.5 is in play (likely CUDA-only, untested here). | 🔎 Investigate (CUDA) |
@@ -149,6 +149,28 @@ These remove symbols/behaviour outright and break at import or call time.
 
 ## Journal
 
+> Running dev log (most recent first).
+
+### 2026-06-08 — `Generator.binomial` BTPE Stirling-series fix (gh-31238)
+
+- **Investigation.** Read NumPy 2.5.0rc1's corrected `random_binomial_btpe`
+  (`distributions.c`) and diffed against numba's port: numba had `13680`
+  (vs `13860`), the 3rd/4th Stirling terms *added* (vs subtracted), and the
+  `w` term divided by `66320.` (vs `166320.`). Fuzzing numba vs NumPy 2.5
+  `Generator.binomial` confirmed divergence for large `n` (the squeeze region,
+  `|y-m| > 20`) — a stream desync from a different accept/reject decision.
+- **Implementation (Numba way).** Factored the four Stirling terms into a
+  `@register_jitable` `_binomial_btpe_stirling` helper *conditionally defined*
+  on `numpy_version`: corrected coefficients/signs for `>= (2,5)`, the original
+  (buggy) ones for `< (2,5)` so numba keeps stream parity with older NumPy
+  Generators and with the legacy `RandomState` path (which NumPy never
+  corrected — left untouched in `cpython/randomimpl.py`).
+- **Verification.** All previously-diverging cases now match; 0/500 broad fuzz
+  divergence; `test_np_randomgen` binomial tests pass. Added a squeeze-region
+  regression subtest (`n=2223, p=0.461`) to `test_binomial_specific_issues`.
+
+---
+
 Running dev log of the NumPy 2.5 work on this branch (most recent first). The
 "Numba way" reference points: shared `@register_jitable` internal impls ported
 from NumPy (with source-URL comments), module-level conditional `@overload`
@@ -187,8 +209,6 @@ PR #10393 (NumPy 2.4), PR #10147 (NumPy 2.3).
 
 ### Next up
 
-1. `Generator.binomial` BTPE Stirling-series fix (gh-31238) — reconcile
-   `np/random/distributions.py::random_binomial_btpe` with NumPy 2.5; leave
-   legacy `RandomState` untouched; add a parity test for an affected `n`.
-2. (Optional) `descending=` for `np.sort`/`np.argsort` (gh-31345).
-3. (Investigate) `timedelta64` generic-unit deprecation surface.
+1. (Optional) `descending=` for `np.sort`/`np.argsort` (gh-31345).
+2. (Investigate) `timedelta64` generic-unit deprecation surface.
+3. (Investigate) `tri`/`triu_indices`/`tril_indices` non-integer + unsigned.

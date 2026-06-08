@@ -577,6 +577,43 @@ def random_logseries(bitgen, p):
             return 2
 
 
+if numpy_version >= (2, 5):
+    @register_jitable
+    def _binomial_btpe_stirling(f1, f2, z, z2, x1, x2, w, w2):
+        # Stirling series correction used in the BTPE squeezing acceptance
+        # test. NumPy 2.5 (gh-31238) fixed two errors here: the leading
+        # coefficient is 13860 (not 13680) and the third and fourth terms are
+        # subtracted (not added). The result must match
+        # numpy.random.Generator.binomial on NumPy >= 2.5.
+        return (
+            (13860. - (462. - (132. - (99. - 140. / f2) / f2) / f2) / f2)
+            / f1 / 166320.
+            + (13860. - (462. - (132. - (99. - 140. / z2) / z2) / z2) / z2)
+            / z / 166320.
+            - (13860. - (462. - (132. - (99. - 140. / x2) / x2) / x2) / x2)
+            / x1 / 166320.
+            - (13860. - (462. - (132. - (99. - 140. / w2) / w2) / w2) / w2)
+            / w / 166320.
+        )
+else:
+    @register_jitable
+    def _binomial_btpe_stirling(f1, f2, z, z2, x1, x2, w, w2):
+        # Original (pre-NumPy-2.5) Stirling series with the two historical
+        # errors, preserved so that numba's Generator.binomial keeps stream
+        # parity with NumPy < 2.5 Generators (and the legacy RandomState path,
+        # which NumPy intentionally never corrected).
+        return (
+            (13680. - (462. - (132. - (99. - 140. / f2) / f2) / f2) / f2)
+            / f1 / 166320.
+            + (13680. - (462. - (132. - (99. - 140. / z2) / z2) / z2) / z2)
+            / z / 166320.
+            + (13680. - (462. - (132. - (99. - 140. / x2) / x2) / x2) / x2)
+            / x1 / 166320.
+            + (13680. - (462. - (132. - (99. - 140. / w2) / w2) / w2) / w2)
+            / w / 66320.
+        )
+
+
 @register_jitable
 def random_binomial_btpe(bitgen, n, p):
     r = min(p, 1.0 - p)
@@ -681,14 +718,7 @@ def random_binomial_btpe(bitgen, n, p):
             w2 = w * w
             if (A > (xm * np.log(f1 / x1) + (n - m + 0.5) * np.log(z / w) +
                      (y - m) * np.log(w * r / (x1 * q)) +
-                     (13680. - (462. - (132. - (99. - 140. / f2) / f2) / f2)
-                      / f2) / f1 / 166320. +
-                     (13680. - (462. - (132. - (99. - 140. / z2) / z2) / z2)
-                      / z2) / z / 166320. +
-                     (13680. - (462. - (132. - (99. - 140. / x2) / x2) / x2)
-                      / x2) / x1 / 166320. +
-                     (13680. - (462. - (132. - (99. - 140. / w2) / w2) / w2)
-                      / w2) / w / 66320.)):
+                     _binomial_btpe_stirling(f1, f2, z, z2, x1, x2, w, w2))):
                 case = 10
                 continue
             case = 60
