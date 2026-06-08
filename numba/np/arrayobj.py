@@ -6601,7 +6601,9 @@ def impl_np_vstack(tup):
         return impl
 
 
-if numpy_version >= (2, 0):
+if (2, 0) <= numpy_version < (2, 5):
+    # np.row_stack was deprecated in NumPy 2.0 (alias of np.vstack) and
+    # removed in NumPy 2.5.
     overload(np.row_stack)(impl_np_vstack)
 
 
