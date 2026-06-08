@@ -54,7 +54,7 @@ These remove symbols/behaviour outright and break at import or call time.
 
 | # | NumPy change (gh) | Numba impact | Action | Status |
 |---|---|---|---|---|
-| 1 | `linalg.eig` / `eigvals` **always return complex** (gh-30411) | **Significant.** Numba's `eig_impl`/`eigvals_impl` use `real_eig_impl` for real input: they return **real** arrays when all eigenvalues are real, and **raise** when any eigenvalue is complex (Numba can't change return type at runtime). NumPy 2.5 removes the dynamic typing — eig is now statically complex. | On `ver >= (2,5)`, make Numba's real-input `eig`/`eigvals` **always return complex** arrays (assemble `wr + 1j*wi`, complex eigenvectors). This both matches NumPy 2.5 **and** removes the long-standing "raises on complex eigenvalues of a real matrix" limitation. Update `test_linalg` accordingly. | 🔧 TODO (source) |
+| 1 | `linalg.eig` / `eigvals` **always return complex** (gh-30411) | **Significant.** Numba's `eig_impl`/`eigvals_impl` use `real_eig_impl` for real input: they returned **real** arrays when all eigenvalues are real, and **raised** when any eigenvalue is complex (Numba can't change return type at runtime). NumPy 2.5 removes the dynamic typing — eig is now statically complex. | On `ver >= (2,5)`, `real_eig_impl_always_complex` / `real_eigvals_impl_always_complex` assemble complex eigenvalues (`complex(wr, wi)`) and unpack LAPACK's packed complex-conjugate eigenvectors. Matches NumPy 2.5 **and** removes the "domain change" limitation. `test_linalg` domain-change block version-gated. | ✅ Done (source) |
 | 2 | BTPE binomial Stirling-series fix (gh-31238); `Generator.binomial` / `Generator.multinomial` streams change. Legacy `RandomState` is intentionally **unchanged**. | Numba's `np/random/distributions.py::random_binomial_btpe` is a port of NumPy's *old* (buggy) BTPE and drives `Generator.binomial` (Numba does **not** implement `Generator.multinomial`). The Stirling acceptance test (case 52, ~L682–691) shows the inherited bug: the `w` term divides by `66320.` while the other three use `166320.`; per gh-31238 the leading coefficient should be `13860` (not `13680`) and the 3rd/4th terms' signs are corrected. Legacy `np.random.binomial` lives separately in `cpython/randomimpl.py` and must stay as-is. | On `ver >= (2,5)`, reconcile `random_binomial_btpe` with NumPy 2.5's corrected Stirling series so `Generator.binomial` matches NumPy for the same `BitGenerator` seed. **Leave the legacy path untouched.** Current spot-checks pass (the error only bites specific `n`), so add a targeted parity test for an affected `n`. | 🔧 TODO (source) + 🔎 |
 | 3 | `datetime64`/`timedelta64` overflow → `OverflowError` (gh-31378) | Numba deliberately uses C wraparound for **all** integer (incl. timedelta) arithmetic and does no overflow checking (performance); this is a documented, pervasive divergence, not datetime-specific. Object-mode tests defer to NumPy and now see the raise. | Keep Numba's wraparound semantics. Tests: skip the overflowing `astype` in `test_comparisons`; only run the overflow-wraparound `test_mul` case where it still applies (nopython still wraps). Document the divergence. | ✅ Done (test) — design decision: do **not** add overflow checks |
 | 4 | `np.where` no longer truncates Python ints → `OverflowError` (gh-30803) | Numba's `np.where` overloads operate on typed values; out-of-range Python-int truncation isn't really expressible the same way. Low risk. | Verify `np.where` with scalar branches on 2.5; adapt a test only if one trips. | 🔎 Investigate |
@@ -144,3 +144,51 @@ These remove symbols/behaviour outright and break at import or call time.
 - `timedelta64` generic-unit deprecation warnings across datetime tests (broad, future-proofing).
 - `tri`/`triu_indices`/`tril_indices` non-integer deprecation + unsigned-int support.
 - `np.where` Python-int overflow, `from_dlpack` `BufferError` (CUDA), allocator/`tracemalloc`, record-dtype padding — verify, adapt only if a test trips.
+
+---
+
+## Journal
+
+Running dev log of the NumPy 2.5 work on this branch (most recent first). The
+"Numba way" reference points: shared `@register_jitable` internal impls ported
+from NumPy (with source-URL comments), module-level conditional `@overload`
+registration gated on `numpy_support.numpy_version`, version-gated tests, and a
+towncrier `highlight` news fragment (`docs/upcoming_changes/`). Precedent:
+PR #10393 (NumPy 2.4), PR #10147 (NumPy 2.3).
+
+### 2026-06-08 — `linalg.eig` / `eigvals` always complex (gh-30411)
+
+- **Investigation.** Confirmed with `scipy` installed: on NumPy 2.5 `eig`/
+  `eigvals` of a real matrix return `complex128`/`complex64`; Numba returned
+  `float64` for real eigenvalues and *raised* `"... must not cause a domain
+  change."` for complex ones (`real_eig_impl`, `numba/np/linalg.py`).
+- **Implementation (Numba way).** Added `real_eig_impl_always_complex` and
+  `real_eigvals_impl_always_complex` selected via
+  `np_support.numpy_version >= (2, 5)` (mirrors the existing
+  real/complex-dtype branch). Eigenvalues assembled as `complex(wr, wi)`;
+  eigenvectors unpacked from LAPACK `?geev`'s packed real storage (real
+  eigenvalue → column directly; conjugate pair `wi[j]>0, wi[j+1]<0` →
+  `col_j ± i*col_{j+1}`), with the result complex dtype baked in at overload
+  time (`complex64` for `float32`, else `complex128`).
+- **Verification.** Eigenvalues match NumPy (values + dtype) for real, complex
+  and mixed cases, `float32`/`float64`, and the 0×0 edge; eigenvectors satisfy
+  `A @ v == v @ diag(w)`; the previously-raising complex case now computes.
+  `test_linalg` eig/eigvals/eigh/eigvalsh all pass (domain-change assertions
+  version-gated to `< (2,5)`).
+- **Note.** Requires `scipy` (LAPACK) to exercise; absent in the default venv.
+
+### 2026-06-08 — Doc + earlier fixes
+
+- Wrote `NUMPY_2_5_SUPPORT.md` (full per-change analysis of NumPy 2.5.0rc1).
+- Source: `np.cross` rejects 2D on `>= (2,5)`; `np.sign(timedelta64)` `m->d`
+  float loop; `np.row_stack` overload gated `< (2,5)`.
+- Tests: `searchsorted` unsorted cross-checks gated; datetime overflow,
+  `'a'` dtype alias, `row_stack` usecase gated.
+
+### Next up
+
+1. `Generator.binomial` BTPE Stirling-series fix (gh-31238) — reconcile
+   `np/random/distributions.py::random_binomial_btpe` with NumPy 2.5; leave
+   legacy `RandomState` untouched; add a parity test for an affected `n`.
+2. (Optional) `descending=` for `np.sort`/`np.argsort` (gh-31345).
+3. (Investigate) `timedelta64` generic-unit deprecation surface.

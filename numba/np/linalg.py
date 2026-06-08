@@ -1031,6 +1031,10 @@ def eig_impl(a):
     JOBVL = ord('N')
     JOBVR = ord('V')
 
+    # Complex result dtype for a real input (NumPy >= 2.5 always returns
+    # complex eigenvalues/eigenvectors for real matrices).
+    complex_dtype = np.complex64 if a.dtype == types.float32 else np.complex128
+
     def real_eig_impl(a):
         """
         eig() implementation for real arrays.
@@ -1127,8 +1131,82 @@ def eig_impl(a):
         _dummy_liveness_func([acpy.size, vl.size, vr.size, w.size])
         return (w, vr.T)
 
+    def real_eig_impl_always_complex(a):
+        """
+        eig() implementation for real arrays on NumPy >= 2.5, which always
+        returns complex eigenvalues/eigenvectors (NumPy no longer narrows the
+        result to a real array when all eigenvalues happen to be real). This
+        also removes the "domain change" restriction of ``real_eig_impl``.
+        """
+        n = a.shape[-1]
+        if a.shape[-2] != n:
+            msg = "Last 2 dimensions of the array must be square."
+            raise np.linalg.LinAlgError(msg)
+
+        _check_finite_matrix(a)
+
+        acpy = _copy_to_fortran_order(a)
+
+        ldvl = 1
+        ldvr = n
+        wr = np.empty(n, dtype=a.dtype)
+        wi = np.empty(n, dtype=a.dtype)
+        vl = np.empty((n, ldvl), dtype=a.dtype)
+        vr = np.empty((n, ldvr), dtype=a.dtype)
+
+        w = np.empty(n, dtype=complex_dtype)
+        v = np.empty((n, n), dtype=complex_dtype)
+
+        if n == 0:
+            return (w, v)
+
+        r = numba_ez_rgeev(kind,
+                            JOBVL,
+                            JOBVR,
+                            n,
+                            acpy.ctypes,
+                            n,
+                            wr.ctypes,
+                            wi.ctypes,
+                            vl.ctypes,
+                            ldvl,
+                            vr.ctypes,
+                            ldvr)
+        _handle_err_maybe_convergence_problem(r)
+
+        # Assemble complex eigenvalues from the real/imaginary parts returned
+        # by ?geev.
+        for i in range(n):
+            w[i] = complex(wr[i], wi[i])
+
+        # Assemble complex eigenvectors from LAPACK's packed real storage. A
+        # real eigenvalue uses its column directly; a complex-conjugate pair
+        # (wi[j] > 0, wi[j + 1] < 0) is stored as real part (column j) and
+        # imaginary part (column j + 1). In numba's layout the i-th eigenvector
+        # is row i of `vr` (cf. the ``vr.T`` returned by real_eig_impl).
+        j = 0
+        while j < n:
+            if wi[j] == 0.0:
+                for k in range(n):
+                    v[j, k] = complex(vr[j, k], 0.0)
+                j += 1
+            else:
+                for k in range(n):
+                    re = vr[j, k]
+                    im = vr[j + 1, k]
+                    v[j, k] = complex(re, im)
+                    v[j + 1, k] = complex(re, -im)
+                j += 2
+
+        # put these in to help with liveness analysis,
+        # `.ctypes` doesn't keep the vars alive
+        _dummy_liveness_func([acpy.size, vl.size, vr.size, wr.size, wi.size])
+        return (w, v.T)
+
     if isinstance(a.dtype, types.scalars.Complex):
         return cmplx_eig_impl
+    elif np_support.numpy_version >= (2, 5):
+        return real_eig_impl_always_complex
     else:
         return real_eig_impl
 
@@ -1145,6 +1223,10 @@ def eigvals_impl(a):
 
     JOBVL = ord('N')
     JOBVR = ord('N')
+
+    # Complex result dtype for a real input (NumPy >= 2.5 always returns
+    # complex eigenvalues for real matrices).
+    complex_dtype = np.complex64 if a.dtype == types.float32 else np.complex128
 
     def real_eigvals_impl(a):
         """
@@ -1246,8 +1328,62 @@ def eigvals_impl(a):
         _dummy_liveness_func([acpy.size, vl.size, vr.size, w.size])
         return w
 
+    def real_eigvals_impl_always_complex(a):
+        """
+        eigvals() implementation for real arrays on NumPy >= 2.5, which always
+        returns complex eigenvalues (matching np.linalg.eigvals) and removes
+        the "domain change" restriction of ``real_eigvals_impl``.
+        """
+        n = a.shape[-1]
+        if a.shape[-2] != n:
+            msg = "Last 2 dimensions of the array must be square."
+            raise np.linalg.LinAlgError(msg)
+
+        _check_finite_matrix(a)
+
+        acpy = _copy_to_fortran_order(a)
+
+        ldvl = 1
+        ldvr = 1
+        wr = np.empty(n, dtype=a.dtype)
+
+        w = np.empty(n, dtype=complex_dtype)
+
+        if n == 0:
+            return w
+
+        wi = np.empty(n, dtype=a.dtype)
+
+        # not referenced but need setting for MKL null check
+        vl = np.empty((1), dtype=a.dtype)
+        vr = np.empty((1), dtype=a.dtype)
+
+        r = numba_ez_rgeev(kind,
+                            JOBVL,
+                            JOBVR,
+                            n,
+                            acpy.ctypes,
+                            n,
+                            wr.ctypes,
+                            wi.ctypes,
+                            vl.ctypes,
+                            ldvl,
+                            vr.ctypes,
+                            ldvr)
+        _handle_err_maybe_convergence_problem(r)
+
+        for i in range(n):
+            w[i] = complex(wr[i], wi[i])
+
+        # put these in to help with liveness analysis,
+        # `.ctypes` doesn't keep the vars alive
+        _dummy_liveness_func([acpy.size, vl.size, vr.size, wr.size, wi.size])
+        return w
+
     if isinstance(a.dtype, types.scalars.Complex):
         return cmplx_eigvals_impl
+    elif np_support.numpy_version >= (2, 5):
+        return real_eigvals_impl_always_complex
     else:
         return real_eigvals_impl
 
