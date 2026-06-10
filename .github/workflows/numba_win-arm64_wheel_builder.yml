@@ -93,9 +93,17 @@ jobs:
           if-no-files-found: error
 
   win-arm64-test:
-    name: win-arm64-test-wheel (py 3.14, np 2.4.6)
+    name: win-arm64-test-wheel (py 3.14, np 2.4.6, shard ${{ matrix.shard }}/6)
     needs: win-arm64-build
     runs-on: windows-11-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        # azure-style sharding (buildscripts/azure/azure-windows.yml):
+        # runtests -j "index:count" slices the discovered test list
+        shard: [0, 1, 2, 3, 4, 5]
+    env:
+      SHARD_COUNT: 6
     defaults:
       run:
         shell: bash -el {0}
@@ -161,4 +169,4 @@ jobs:
           python -m pip install dist/*.whl
 
           python -m numba -s
-          python -m numba.runtests -m 4 -v
+          python -m numba.runtests -b -m 4 -j "${{ matrix.shard }}:${SHARD_COUNT}" -- numba.tests
