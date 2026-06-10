@@ -4,6 +4,7 @@ Support for typing ctypes function pointers.
 
 
 import ctypes
+import platform
 import sys
 
 from numba.core import types, config
@@ -116,8 +117,12 @@ def make_function_type(cfnptr):
     # platforms, explicit conversion to a int64 should match.
     if cret == types.voidptr:
         cret = types.uintp
-    if sys.platform == 'win32' and not cfnptr._flags_ & ctypes._FUNCFLAG_CDECL:
-        # 'stdcall' calling convention under Windows
+    if (sys.platform == 'win32' and platform.machine() != 'ARM64'
+            and not cfnptr._flags_ & ctypes._FUNCFLAG_CDECL):
+        # 'stdcall' calling convention under Windows. Only meaningful on
+        # x86: the AArch64 backend rejects x86_stdcallcc as an unsupported
+        # calling convention, and on arm64 WINFUNCTYPE uses the standard
+        # AAPCS convention anyway.
         cconv = 'x86_stdcallcc'
     else:
         # Default C calling convention
