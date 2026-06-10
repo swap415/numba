@@ -3,9 +3,7 @@ import unittest
 from collections import namedtuple
 import contextlib
 import itertools
-import platform
 import random
-import sys
 from numba.core.errors import TypingError
 
 import numpy as np
@@ -619,29 +617,12 @@ class TestTupleSets(TestSets):
         return list(zip(b, c, d))
 
 
-_skip_win_arm64_slow_compile = unittest.skipIf(
-    sys.platform == 'win32' and platform.machine() == 'ARM64',
-    'comparator tests exceed the parallel runner timeout on win-arm64 CI')
-
-
 class TestUnicodeSets(TestSets):
     """
     Test sets with unicode keys. For the purpose of testing refcounted sets.
     """
     def _range(self, stop):
         return ['A{}'.format(i) for i in range(int(stop))]
-
-    @_skip_win_arm64_slow_compile
-    def test_isdisjoint(self):
-        super().test_isdisjoint()
-
-    @_skip_win_arm64_slow_compile
-    def test_issubset(self):
-        super().test_issubset()
-
-    @_skip_win_arm64_slow_compile
-    def test_issuperset(self):
-        super().test_issuperset()
 
 
 class TestSetsInvalidDtype(TestSets):
