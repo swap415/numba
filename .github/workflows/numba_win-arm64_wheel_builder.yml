@@ -1,6 +1,9 @@
 name: numba_win-arm64_wheel_builder
 
 on:
+  push:
+    branches:
+      - exp/win-arm64
   schedule:
     - cron: '30 8 * * 6'  # Saturday 8:30 AM UTC - win-arm64 wheel
   pull_request:
@@ -69,6 +72,8 @@ jobs:
           echo "${CONDA_PREFIX}/Scripts" >> "${GITHUB_PATH}"
           if [ "${{ inputs.llvmlite_wheel_runid }}" != "" ]; then
             python -m pip install llvmlite_wheels/*.whl
+          elif ls ci_artifacts/wheels/llvmlite-*.whl >/dev/null 2>&1; then
+            python -m pip install ci_artifacts/wheels/llvmlite-*.whl
           else
             python -m pip install -i ${{ env.WHEELS_INDEX_URL }} llvmlite
           fi
@@ -96,6 +101,9 @@ jobs:
         shell: bash -el {0}
 
     steps:
+      - name: Clone repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
       - name: Set up conda-standalone
         uses: conda-incubator/setup-conda-standalone@00a34805e93a8b640aee5f8a20e8f481ad77e3b4 # v0.1.0
         with:
@@ -140,6 +148,8 @@ jobs:
           python -m pip install --pre numpy==${NUMPY_VERSION}
           if [ "${{ inputs.llvmlite_wheel_runid }}" != "" ]; then
             python -m pip install llvmlite_wheels/*.whl
+          elif ls ci_artifacts/wheels/llvmlite-*.whl >/dev/null 2>&1; then
+            python -m pip install ci_artifacts/wheels/llvmlite-*.whl
           else
             python -m pip install --pre -i ${{ env.WHEELS_INDEX_URL }} llvmlite
           fi

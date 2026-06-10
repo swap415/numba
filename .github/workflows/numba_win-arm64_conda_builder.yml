@@ -1,6 +1,9 @@
 name: numba_win-arm64_conda_builder
 
 on:
+  push:
+    branches:
+      - exp/win-arm64
   schedule:
     - cron: '15 8 * * 6'  # Saturday 8:15 AM UTC - win-arm64 conda
   pull_request:
@@ -75,6 +78,8 @@ jobs:
 
           if [ "${{ inputs.llvmlite_run_id }}" != "" ]; then
             LLVMLITE_CHANNEL="${{ github.workspace }}/llvmlite_conda"
+          elif [ -d ci_artifacts/llvmlite_channel/win-arm64 ]; then
+            LLVMLITE_CHANNEL="${{ github.workspace }}/ci_artifacts/llvmlite_channel"
           else
             LLVMLITE_CHANNEL="${{ env.CONDA_CHANNEL_LLVMLITE }}"
           fi
@@ -113,6 +118,9 @@ jobs:
         shell: bash -elx {0}
 
     steps:
+      - name: Clone repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
       - name: Set up conda-standalone
         uses: conda-incubator/setup-conda-standalone@00a34805e93a8b640aee5f8a20e8f481ad77e3b4 # v0.1.0
         with:
@@ -153,6 +161,8 @@ jobs:
         run: |
           if [ "${{ inputs.llvmlite_run_id }}" != "" ]; then
             LLVMLITE_CHANNEL="${{ github.workspace }}/llvmlite_conda"
+          elif [ -d ci_artifacts/llvmlite_channel/win-arm64 ]; then
+            LLVMLITE_CHANNEL="${{ github.workspace }}/ci_artifacts/llvmlite_channel"
           else
             LLVMLITE_CHANNEL="${{ env.CONDA_CHANNEL_LLVMLITE }}"
           fi
