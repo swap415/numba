@@ -118,8 +118,12 @@ jobs:
         shell: bash -elx {0}
 
     steps:
-      - name: Clone repository
+      - name: Clone repository (ci_artifacts only)
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # sparse checkout so the numba source tree cannot shadow the
+          # installed package during tests
+          sparse-checkout: ci_artifacts
 
       - name: Set up conda-standalone
         uses: conda-incubator/setup-conda-standalone@00a34805e93a8b640aee5f8a20e8f481ad77e3b4 # v0.1.0
