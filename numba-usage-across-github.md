@@ -83,3 +83,54 @@ GET https://api.github.com/repos/<owner>/<name>   ->  stargazers_count, forks_co
 
 The same approach generalizes: pick a candidate, confirm a real import in its source, then
 rank by the popularity metric you care about (stars or forks).
+
+---
+
+## Addendum (2026-06-16) — What was missing / not recorded
+
+The first pass searched only the CPU import forms (`import numba` / `from numba import …`)
+over a hand-picked candidate set. That **systematically missed several categories**. The
+items below were verified after the fact (real imports in their own source, live counts):
+
+### Verified additions (belong in the main ranking)
+
+| Repository | ⭐ Stars | 🍴 Forks | Domain | Where Numba is used |
+|------------|--------:|--------:|--------|---------------------|
+| [rapidsai/cudf](https://github.com/rapidsai/cudf) | 9,668 | 1,068 | GPU DataFrames | `cudf/core/udf/*` compiles user UDFs with `from numba import cuda` / `numba.cuda` |
+| [rapidsai/cuml](https://github.com/rapidsai/cuml) | 5,209 | 631 | GPU machine learning | `from numba import cuda` in metrics, model selection, sparse funcs |
+| [aeon-toolkit/aeon](https://github.com/aeon-toolkit/aeon) | 1,391 | 274 | Time-series ML (sktime fork) | `aeon/utils/numba/**`, distances, ROCKET/SAX (`@njit` pervasive) |
+| [lmcinnes/pynndescent](https://github.com/lmcinnes/pynndescent) | 966 | 106 | Approx. nearest neighbors | Entire library is Numba-jitted (it's UMAP's ANN backend) |
+
+> Inserting these, the GPU RAPIDS libraries land mid-table — **cudf at ~#5** (just below
+> pyod) and **cuml around #11** — so they are material omissions, not footnotes.
+
+### Categories still not fully covered (by design / by limitation)
+
+1. **GPU `numba.cuda` users** — the biggest blind spot. The whole RAPIDS stack uses Numba's
+   CUDA target: beyond cudf/cuml above, also **cugraph, cuspatial, cusignal, cuxfilter**,
+   plus `numba-cuda` itself. A search for `import numba` alone under-weights these.
+2. **The long tail** — `from numba import njit` matches **11,600+ files**; this document only
+   ranks the popular, notable projects, not the thousands of small/research repos.
+3. **Transitive-only dependents** — huge in number (e.g. most of the audio ML ecosystem
+   pulls Numba via librosa). Deliberately excluded as "not actual code use," but worth a
+   separate count if "uses Numba at runtime" is the question.
+4. **Numba's own ecosystem packages** — `llvmlite`, `numba-cuda`, `numba-scipy`,
+   `numba-dpex`, examples/benchmark repos.
+5. **Forks of these repos** — GitHub's "used by"/dependents graph would capture these; code
+   search does not.
+
+### Ranking caveat — forks vs. stars
+
+The request asked for "descending order of stars **and** forks," but the table is sorted by
+**stars only**. A **forks-first** ranking looks materially different — e.g.
+**pandas (20,014 forks)** and **whisper (12,539)** still lead, but **QuantEcon (2,282
+forks)** and **DeepLabCut (1,787)** jump well above their star-rank positions. If a
+forks-sorted view is the goal, that's a separate ordering to generate.
+
+### Honest limitation
+
+I could not access the referenced HackMD document (`hackmd.io` is outside this
+environment's network egress allowlist, and the page returns HTTP 403 to the fetcher), so
+this addendum reflects gaps I could identify and verify independently — **not** a line-by-line
+diff against that specific note. Share the doc's contents (paste, or a reachable mirror) and
+I'll produce an exact diff of what it has that this list doesn't, and vice versa.
