@@ -151,6 +151,13 @@ These remove symbols/behaviour outright and break at import or call time.
 
 > Running dev log (most recent first).
 
+### 2026-06-08 — Regression for descending-sort typing/lowering changes
+
+- `test_sort`, `test_array_methods`, `test_np_functions`, `test_array_exprs`,
+  `test_parfors`: **671 passed**, 289 skipped, 0 failures/errors. Confirms the
+  `resolve_sort`/`resolve_argsort`/`np.argsort`-redirect typing changes and the
+  new lowering variants don't disturb the heavily-used sort/argsort paths.
+
 ### 2026-06-08 — `descending=` for sort/argsort (gh-31345) — implemented
 
 - **Investigation.** NumPy 2.5 added `descending=True` to `np.sort`,
