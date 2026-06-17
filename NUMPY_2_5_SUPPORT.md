@@ -58,7 +58,7 @@ These remove symbols/behaviour outright and break at import or call time.
 | 2 | BTPE binomial Stirling-series fix (gh-31238); `Generator.binomial` / `Generator.multinomial` streams change. Legacy `RandomState` is intentionally **unchanged**. | Numba's `np/random/distributions.py::random_binomial_btpe` was a port of NumPy's *old* (buggy) BTPE and drives `Generator.binomial` (Numba does **not** implement `Generator.multinomial`). Inherited bugs: leading coeff `13680` (vs `13860`), 3rd/4th terms added (vs subtracted), `w` divisor `66320.` (vs `166320.`). | Added version-gated `_binomial_btpe_stirling` helper: corrected series on `ver >= (2,5)`, original on `< (2,5)` (keeps stream parity with older NumPy + legacy `RandomState`, which NumPy never corrected). Now matches NumPy 2.5 `Generator.binomial` bit-for-bit (0/500 fuzz divergence). Added regression subtest for the squeeze region. | ✅ Done (source) |
 | 3 | `datetime64`/`timedelta64` overflow → `OverflowError` (gh-31378) | Numba deliberately uses C wraparound for **all** integer (incl. timedelta) arithmetic and does no overflow checking (performance); this is a documented, pervasive divergence, not datetime-specific. Object-mode tests defer to NumPy and now see the raise. | Keep Numba's wraparound semantics. Tests: skip the overflowing `astype` in `test_comparisons`; only run the overflow-wraparound `test_mul` case where it still applies (nopython still wraps). Document the divergence. | ✅ Done (test) — design decision: do **not** add overflow checks |
 | 4 | `np.where` no longer truncates Python ints → `OverflowError` (gh-30803) | Verified: in-range scalars match NumPy. An out-of-`int64` Python literal (e.g. `2**70`) is wrapped by Numba's *general* integer-literal handling (not `where`-specific) — the same no-overflow-check stance as the datetime decision (§2.3). NumPy now raises. | None — consistent, documented Numba divergence; aligning only `where` would be inconsistent. | ➖ No impact (verified) |
-| 5 | `from_dlpack` raises `BufferError` (was `RuntimeError`) (gh-30937) | Affects Numba's DLPack interop (CUDA / `__dlpack__`). Error-type only. | Check Numba's dlpack import paths/tests for `RuntimeError` expectations; relax to `BufferError` where 2.5 is in play (likely CUDA-only, untested here). | 🔎 Investigate (CUDA) |
+| 5 | `from_dlpack` raises `BufferError` (was `RuntimeError`) (gh-30937) | Verified: Numba has **no** `dlpack`/`from_dlpack`/`__dlpack__` code anywhere (whole-tree grep empty), so the error-type change cannot affect it. | None. | ➖ No impact (verified) |
 | 6 | Default memory allocator → `PyMem_RawMalloc/Free` (gh-30846, gh-31503) | NumPy arrays handed to Numba use a different allocator; Numba's NRT manages its own memory. Should be transparent. | None expected; watch for NRT/`tracemalloc`-related test assumptions. | ➖ No impact (verify) |
 | 7 | MSVC ≥ 19.35 required (gh-30489) | Windows build toolchain only. | Ensure Windows CI uses VS 2022 ≥ 17.5; no code change. | ➖ Build infra |
 | 8 | Cython ≥ 3.0 required (gh-30770) | Numba does not use Cython. | None. | ➖ No impact |
@@ -150,6 +150,12 @@ These remove symbols/behaviour outright and break at import or call time.
 ## Journal
 
 > Running dev log (most recent first).
+
+### 2026-06-08 — `from_dlpack` BufferError (gh-30937): verified no-impact
+
+- Whole-tree grep for `dlpack`/`from_dlpack`/`__dlpack__` in Numba is empty —
+  Numba implements no DLPack interop, so NumPy's error-type change cannot
+  affect it. Closes the last open investigation item.
 
 ### 2026-06-08 — Regression for descending-sort typing/lowering changes
 
@@ -286,11 +292,9 @@ PR #10393 (NumPy 2.4), PR #10147 (NumPy 2.3).
 
 ### Next up
 
-All actionable NumPy 2.5 items from the analysis are now either implemented or
-verified as no-impact. Remaining (lower priority):
-
-1. (Optional, deferred) `descending=` for `np.sort`/`np.argsort` (gh-31345) —
-   full typing+lowering feature; scoped in the journal above.
-2. (CUDA, untested here) `from_dlpack` `RuntimeError` → `BufferError` (gh-30937).
-3. Test-hygiene: move datetime tests off the generic `timedelta64` unit before
-   NumPy turns the deprecation into an error.
+All actionable NumPy 2.5 items from the analysis are now implemented or verified
+as no-impact. The only remaining follow-up is non-blocking test hygiene: move
+the datetime tests off the generic `timedelta64` unit (they emit non-fatal
+deprecation warnings) before NumPy turns that deprecation into an error. Numba
+*source* is already clean; this is a mechanical test-only change deferred to
+its own PR to avoid large churn here.
