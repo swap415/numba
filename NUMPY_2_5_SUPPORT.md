@@ -86,7 +86,7 @@ These remove symbols/behaviour outright and break at import or call time.
 
 | # | NumPy change (gh) | Numba impact | Action | Status |
 |---|---|---|---|---|
-| 1 | `descending=True` for `np.sort` / `np.argsort` (gh-31345) | Numba's `impl_np_sort(a)` takes only `a`; `argsort` supports `kind` but not `descending`. Signature now lags NumPy. | Add a `descending` keyword to Numba's `np.sort` / `np.argsort` (and `ndarray.sort`/`argsort`) overloads, NaNs-to-end in both directions, to match 2.5. | 🔧 TODO (source, optional) |
+| 1 | `descending=True` for `np.sort` / `np.argsort` (gh-31345) | Numba's sort/argsort lacked `descending`. | Added `descending` (runtime bool) to `np.sort`, `np.argsort`, and `ndarray.sort`/`argsort` via reversed NaN-last comparators selected at runtime; NaNs stay last, ties preserved. Matches NumPy 2.5 across dtypes; tests added. | ✅ Done (source) |
 | 2 | N-D polynomial eval: `polyvalnd`, `chebvalnd`, `legvalnd`, `hermvalnd`, `hermevalnd`, `lagvalnd` (gh-30857) | New functions Numba doesn't overload — pure feature gap. | Optionally add `@overload`s in `np/polynomial`. Not required for compatibility. | 🔧 TODO (source, optional) |
 | 3 | `register_dlpack_dtype` for user dtypes (gh-31256) | Optional interop feature. | None required. | ➖ Optional |
 | 4 | `ndarray` structural pattern matching (`Py_TPFLAGS_SEQUENCE`) (gh-30653) | Numba doesn't lower `match`/`case` over arrays. | None. | ➖ No impact |
@@ -150,6 +150,30 @@ These remove symbols/behaviour outright and break at import or call time.
 ## Journal
 
 > Running dev log (most recent first).
+
+### 2026-06-08 — `descending=` for sort/argsort (gh-31345) — implemented
+
+- **Investigation.** NumPy 2.5 added `descending=True` to `np.sort`,
+  `np.argsort`, and the `ndarray.sort`/`argsort` methods (NaNs stay last in both
+  directions; ties keep original index order). Empirically confirmed numba
+  receives boolean kwargs as **non-literal** `types.boolean` (or python `False`
+  when omitted), so a compile-time comparator switch via a literal is not
+  possible — `descending` must be handled as a runtime value.
+- **Implementation (Numba way).** Added descending NaN-last comparators
+  `gt_floats`/`gt_complex` (numpy_support) and `default_gt` (arrayobj);
+  extended `lt_implementation(dtype, descending=)`. The lowerings compile
+  *both* an ascending and a descending sort (via the reversed comparator) and
+  select at runtime on the boolean, so tie order and NaN placement come from
+  the sort itself (matching NumPy). Plumbed `descending` through additively:
+  `np.sort` `@overload`; `array.sort`/`array.argsort` typing
+  (`arraydecl.resolve_sort`/`resolve_argsort`, new signatures only when the
+  kwarg is supplied — existing signatures unchanged); the `np.argsort`
+  redirect (`npydecl.Numpy_method_redirection`); and new
+  `@lower_builtin` variants taking a trailing `types.Boolean`.
+- **Verification.** All four entry points match NumPy 2.5 across int/float/
+  complex, ascending+descending, ties, NaNs, empty, single, and runtime
+  booleans. `test_sort` (69) and `test_array_methods -k sort` (84) still pass;
+  added `test_sort_descending` / `test_argsort_descending` (gated `>= (2,5)`).
 
 ### 2026-06-08 — Full regression of touched modules
 

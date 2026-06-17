@@ -25,6 +25,9 @@ Numba now supports NumPy 2.5, with the following notable changes:
   "generic" ``timedelta64`` unit (the internal ``NaT`` constant now uses an
   explicit unit).
 
+- ``np.sort``, ``np.argsort`` and the ``ndarray.sort`` / ``ndarray.argsort``
+  methods now support the ``descending`` keyword added in NumPy 2.5.
+
 - ``np.searchsorted`` results for input arrays that are not sorted (an
   undefined case in NumPy) may differ from NumPy 2.5 due to NumPy's new batched
   binary search. Results for correctly sorted input are unaffected.

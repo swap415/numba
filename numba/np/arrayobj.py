@@ -18,7 +18,8 @@ from numba.core import types, typing, errors, cgutils, extending
 from numba.np.numpy_support import (as_dtype, from_dtype, carray, farray,
                                     is_contiguous, is_fortran,
                                     check_is_integer, type_is_scalar,
-                                    lt_complex, lt_floats)
+                                    lt_complex, lt_floats,
+                                    gt_complex, gt_floats)
 from numba.np.numpy_support import type_can_asarray, is_nonelike, numpy_version
 from numba.core.imputils import (lower_builtin, lower_getattr,
                                  lower_getattr_generic,
@@ -6918,6 +6919,13 @@ def default_lt(a, b):
     return a < b
 
 
+def default_gt(a, b):
+    """
+    Trivial descending comparison function between two keys.
+    """
+    return a > b
+
+
 def get_sort_func(kind, lt_impl, is_argsort=False):
     """
     Get a sort implementation of the given kind.
@@ -6942,7 +6950,14 @@ def get_sort_func(kind, lt_impl, is_argsort=False):
         return func
 
 
-def lt_implementation(dtype):
+def lt_implementation(dtype, descending=False):
+    if descending:
+        if isinstance(dtype, types.Float):
+            return gt_floats
+        elif isinstance(dtype, types.Complex):
+            return gt_complex
+        else:
+            return default_gt
     if isinstance(dtype, types.Float):
         return lt_floats
     elif isinstance(dtype, types.Complex):
@@ -6965,15 +6980,37 @@ def array_sort(context, builder, sig, args):
     return context.compile_internal(builder, array_sort_impl, sig, args)
 
 
+@lower_builtin("array.sort", types.Array, types.Boolean)
+def array_sort_descending(context, builder, sig, args):
+    # array.sort(descending=...) — NumPy >= 2.5. ``descending`` is a runtime
+    # boolean, so both an ascending and a descending sort (the latter using a
+    # reversed, NaN-last comparator) are compiled and selected at runtime.
+    arytype = sig.args[0]
+
+    asc_sort = get_sort_func(kind='quicksort',
+                             lt_impl=lt_implementation(arytype.dtype))
+    desc_sort = get_sort_func(kind='quicksort',
+                              lt_impl=lt_implementation(arytype.dtype,
+                                                        descending=True))
+
+    def array_sort_impl(arr, descending):
+        if descending:
+            desc_sort(arr)
+        else:
+            asc_sort(arr)
+
+    return context.compile_internal(builder, array_sort_impl, sig, args)
+
+
 @overload(np.sort)
-def impl_np_sort(a):
+def impl_np_sort(a, descending=False):
     if not type_can_asarray(a):
         raise errors.TypingError('Argument "a" must '
                                  'be array-like')
 
-    def np_sort_impl(a):
+    def np_sort_impl(a, descending=False):
         res = a.copy()
-        res.sort()
+        res.sort(descending=descending)
         return res
     return np_sort_impl
 
@@ -6992,6 +7029,34 @@ def array_argsort(context, builder, sig, args):
 
     innersig = sig.replace(args=sig.args[:1])
     innerargs = args[:1]
+    return context.compile_internal(builder, array_argsort_impl,
+                                    innersig, innerargs)
+
+
+@lower_builtin("array.argsort", types.Array, types.StringLiteral, types.Boolean)
+@lower_builtin(np.argsort, types.Array, types.StringLiteral, types.Boolean)
+def array_argsort_descending(context, builder, sig, args):
+    # argsort(kind=..., descending=...) — NumPy >= 2.5. ``descending`` is a
+    # runtime boolean; both directions are compiled (the descending one with a
+    # reversed, NaN-last comparator) and selected at runtime.
+    arytype, kind, _ = sig.args
+
+    asc_sort = get_sort_func(kind=kind.literal_value,
+                             lt_impl=lt_implementation(arytype.dtype),
+                             is_argsort=True)
+    desc_sort = get_sort_func(kind=kind.literal_value,
+                              lt_impl=lt_implementation(arytype.dtype,
+                                                        descending=True),
+                              is_argsort=True)
+
+    def array_argsort_impl(arr, descending):
+        if descending:
+            return desc_sort(arr)
+        else:
+            return asc_sort(arr)
+
+    innersig = sig.replace(args=(sig.args[0], sig.args[2]))
+    innerargs = (args[0], args[2])
     return context.compile_internal(builder, array_argsort_impl,
                                     innersig, innerargs)
 

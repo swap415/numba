@@ -382,8 +382,13 @@ class Numpy_method_redirection(AbstractTemplate):
                         pass
                     pysig = utils.pysignature(sum_stub)
             elif self.method_name == 'argsort':
-                def argsort_stub(arr, kind='quicksort'):
-                    pass
+                # NumPy 2.5 added the descending keyword to np.argsort.
+                if 'descending' in kws:
+                    def argsort_stub(arr, kind='quicksort', descending=False):
+                        pass
+                else:
+                    def argsort_stub(arr, kind='quicksort'):
+                        pass
                 pysig = utils.pysignature(argsort_stub)
             else:
                 fmt = "numba doesn't support kwarg for {}"

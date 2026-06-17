@@ -458,24 +458,52 @@ class ArrayAttribute(AttributeTemplate):
     @bound_function("array.sort")
     def resolve_sort(self, ary, args, kws):
         assert not args
-        assert not kws
-        return signature(types.none)
+        kwargs = dict(kws)
+        descending = kwargs.pop('descending', None)
+        if kwargs:
+            msg = "Unsupported keywords: {!r}"
+            raise TypingError(msg.format([k for k in kwargs.keys()]))
+        # Preserve the original no-argument signature when descending is not
+        # given (NumPy 2.5 added the descending keyword).
+        if descending is None:
+            return signature(types.none)
+        if not isinstance(descending, types.Boolean):
+            raise TypingError('"descending" must be a boolean')
+
+        def sort_stub(descending=False):
+            pass
+        pysig = utils.pysignature(sort_stub)
+        return signature(types.none, descending).replace(pysig=pysig)
 
     @bound_function("array.argsort")
     def resolve_argsort(self, ary, args, kws):
         assert not args
         kwargs = dict(kws)
         kind = kwargs.pop('kind', types.StringLiteral('quicksort'))
+        descending = kwargs.pop('descending', None)
         if not isinstance(kind, types.StringLiteral):
             raise TypingError('"kind" must be a string literal')
         if kwargs:
             msg = "Unsupported keywords: {!r}"
             raise TypingError(msg.format([k for k in kwargs.keys()]))
+        if descending is not None and not isinstance(descending, types.Boolean):
+            raise TypingError('"descending" must be a boolean')
         if ary.ndim == 1:
-            def argsort_stub(kind='quicksort'):
+            # Preserve the original (kind-only) signature when descending is not
+            # given (NumPy 2.5 added the descending keyword).
+            if descending is None:
+                def argsort_stub(kind='quicksort'):
+                    pass
+                pysig = utils.pysignature(argsort_stub)
+                sig = signature(types.Array(types.intp, 1, 'C'),
+                                kind).replace(pysig=pysig)
+                return sig
+
+            def argsort_stub(kind='quicksort', descending=False):
                 pass
             pysig = utils.pysignature(argsort_stub)
-            sig = signature(types.Array(types.intp, 1, 'C'), kind).replace(pysig=pysig)
+            sig = signature(types.Array(types.intp, 1, 'C'),
+                            kind, descending).replace(pysig=pysig)
             return sig
 
     @bound_function("array.view")
