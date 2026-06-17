@@ -87,7 +87,7 @@ These remove symbols/behaviour outright and break at import or call time.
 | # | NumPy change (gh) | Numba impact | Action | Status |
 |---|---|---|---|---|
 | 1 | `descending=True` for `np.sort` / `np.argsort` (gh-31345) | Numba's sort/argsort lacked `descending`. | Added `descending` (runtime bool) to `np.sort`, `np.argsort`, and `ndarray.sort`/`argsort` via reversed NaN-last comparators selected at runtime; NaNs stay last, ties preserved. Matches NumPy 2.5 across dtypes; tests added. | ✅ Done (source) |
-| 2 | N-D polynomial eval: `polyvalnd`, `chebvalnd`, `legvalnd`, `hermvalnd`, `hermevalnd`, `lagvalnd` (gh-30857) | New functions Numba doesn't overload — pure feature gap. | Optionally add `@overload`s in `np/polynomial`. Not required for compatibility. | 🔧 TODO (source, optional) |
+| 2 | N-D polynomial eval: `polyvalnd`, `chebvalnd`, `legvalnd`, `hermvalnd`, `hermevalnd`, `lagvalnd` (gh-30857) | New functions, pure feature gap (not a compatibility break). Numba has `polyval` but **not** the base 1-D evaluators `chebval`/`legval`/`hermval`/`hermeval`/`lagval` that the corresponding `*valnd` need; `polyvalnd(pts, c)` also takes a variable-length tuple of point arrays. | Large optional feature (5 prerequisite base evaluators + 6 N-D functions, non-trivial nopython tuple/coefficient handling). Deferred to a dedicated PR; out of scope for 2.5 *compatibility*. | ⏸️ Deferred (optional feature) |
 | 3 | `register_dlpack_dtype` for user dtypes (gh-31256) | Optional interop feature. | None required. | ➖ Optional |
 | 4 | `ndarray` structural pattern matching (`Py_TPFLAGS_SEQUENCE`) (gh-30653) | Numba doesn't lower `match`/`case` over arrays. | None. | ➖ No impact |
 | 5 | Pixi package definitions (gh-30381) | NumPy's own build infra. | None. | ➖ No impact |
@@ -150,6 +150,18 @@ These remove symbols/behaviour outright and break at import or call time.
 ## Journal
 
 > Running dev log (most recent first).
+
+### 2026-06-08 — N-D polynomial eval (gh-30857): scoped as deferred feature
+
+- Investigated. These are new (optional) functions, not a compatibility break.
+  Numba implements `polyval` but none of the base 1-D evaluators
+  (`chebval`/`legval`/`hermval`/`hermeval`/`lagval`) that `chebvalnd` etc.
+  build on, and `polyvalnd(pts, c)` takes a variable-length tuple of point
+  arrays. Implementing the suite means 5 prerequisite base evaluators + 6 N-D
+  functions with non-trivial nopython tuple/coefficient handling — a sizable
+  standalone feature. Deferred to its own PR; not part of 2.5 compatibility.
+- This was the last remaining item; all NumPy 2.5 *support/compatibility* work
+  is now complete (see status tables above).
 
 ### 2026-06-08 — `from_dlpack` BufferError (gh-30937): verified no-impact
 
