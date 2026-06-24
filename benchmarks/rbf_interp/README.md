@@ -35,15 +35,20 @@ unset PYTHONPATH                                  # avoid a dev-numba checkout l
 uv venv --python 3.12 .venv && source .venv/bin/activate
 uv pip install numba scipy jax torch pythran array-api-compat
 pythran benchmarks/rbf_interp/rbf_pythran.py      # build the AOT baseline once
-python benchmarks/rbf_interp/run.py               # both layers, default sweep
+python benchmarks/rbf_interp/run.py               # both layers, CPU sweep
 python run.py --layer minimal --kernel gaussian   # one layer, other kernel
+python run.py --device cuda --big                 # jax/torch on GPU, large sizes
 ```
+
+`--device cuda` puts jax/torch on the GPU (needs CUDA torch + `jax[cuda12]`);
+numpy/numba/pythran stay on CPU as baselines. `--big` switches to larger sizes
+where the GPU isn't launch-overhead-bound.
 
 Every backend's output is asserted equal to the numpy reference before timing;
 `!` in a cell marks a mismatch. Speedup is reported against `pythran`.
 
-## Caveat
+## Machines
 
-CPU-only (Apple M4 Pro, no CUDA). The PR's headline 5–40× numbers are GPU
-(CUDA jax/torch, CuPy) and **cannot** be reproduced here. This measures the CPU
-story: AOT (pythran) vs JIT (numba/jax/torch) vs eager numpy. See `RESULTS.md`.
+Run on two hosts (see `RESULTS.md`): a Mac M4 Pro (CPU-only) and a Linux box
+with an RTX 3090 Ti. CPU tells the AOT-vs-JIT story; the GPU reproduces the
+PR's headline 5–40× (we measured 33–52×), which a CUDA-less machine can't show.

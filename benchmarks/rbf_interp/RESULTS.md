@@ -1,64 +1,74 @@
-# Results — RBF eval, numba vs jax vs torch vs pythran (CPU)
+# Results — RBF eval, numba vs jax vs torch vs pythran
 
-**Machine:** Apple M4 Pro (14 numba threads, 10 torch threads), macOS 26.2, Python 3.12.
-**Stack:** numba 0.65.1 / jax 0.10.2 / torch 2.12.1 / pythran 0.18.1 / scipy 1.18.0 / numpy 2.4.6.
-**Method:** median of 15 runs after 3 warmups; every backend's output asserted equal to numpy before timing. Speedup vs pythran (the PR's AOT baseline). No CUDA — CPU only.
+Two machines, identical stack (numba 0.65.1 / jax 0.10.2 / torch 2.12.1 /
+pythran 0.18.1 / scipy 1.18.0, Python 3.12):
 
-## thin_plate_spline, degree 1
+| host | CPU | GPU |
+|---|---|---|
+| **mac** (M4 Pro) | Apple M4 Pro, 14 numba threads | — (no CUDA) |
+| **arrakis** (Linux) | Intel i7-14700, 28 numba threads | 2× RTX 3090 Ti (24 GB) |
 
-`P` data points, `Q` eval points; the eval matrix is `(Q, P+R)`.
+**Method:** median of N runs after warmups; every backend's output asserted
+equal to numpy before timing (no `!` mismatch anywhere). Speedup vs `pythran`
+(the PR's AOT baseline). `P` data points, `Q` eval points; eval matrix `(Q, P+R)`.
 
-### minimal layer (synthetic coeffs — isolates the eval kernel)
+## CPU — faithful layer (real `RBFInterpolator` fit), thin_plate_spline
 
-| P | Q | pythran | numpy | numba | jax | torch |
-|---:|---:|---:|---:|---:|---:|---:|
-| 100 | 1000 | 0.62 ms (1.0×) | 1.58 ms (0.4×) | 1.17 ms (0.5×) | 0.21 ms (3.0×) | 0.32 ms (1.9×) |
-| 300 | 3000 | 5.44 ms (1.0×) | 12.59 ms (0.4×) | 7.76 ms (0.7×) | 0.96 ms (5.7×) | 0.79 ms (6.9×) |
-| 1000 | 10000 | 56.5 ms (1.0×) | 143 ms (0.4×) | 71.0 ms (0.8×) | 9.71 ms (5.8×) | **6.05 ms (9.3×)** |
-
-### faithful layer (real `RBFInterpolator` fit — the PR's code path)
+### mac (M4 Pro, 14 threads)
 
 | P | Q | pythran | numpy | numba | jax | torch |
 |---:|---:|---:|---:|---:|---:|---:|
-| 100 | 1000 | 0.62 ms (1.0×) | 1.49 ms (0.4×) | 1.15 ms (0.5×) | 0.20 ms (3.1×) | 0.32 ms (1.9×) |
-| 300 | 3000 | 5.37 ms (1.0×) | 12.90 ms (0.4×) | 7.71 ms (0.7×) | 0.96 ms (5.6×) | 0.80 ms (6.7×) |
-| 1000 | 10000 | 59.0 ms (1.0×) | 145 ms (0.4×) | 75.8 ms (0.8×) | 9.75 ms (6.1×) | **6.14 ms (9.6×)** |
+| 100 | 1000 | 0.60 ms (1.0×) | 1.40 ms (0.4×) | 1.25 ms (0.5×) | 0.17 ms (3.5×) | 0.25 ms (2.4×) |
+| 300 | 3000 | 5.03 ms (1.0×) | 12.5 ms (0.4×) | 8.03 ms (0.6×) | 0.96 ms (5.2×) | 0.81 ms (6.2×) |
+| 1000 | 10000 | 58.4 ms (1.0×) | 142 ms (0.4×) | 80.9 ms (0.7×) | 9.88 ms (5.9×) | **5.94 ms (9.8×)** |
 
-The two layers agree — evaluation cost is the same; only the coeff *values* differ.
-
-## gaussian, degree 1 (minimal) — pattern is kernel-independent
+### arrakis (i7-14700, 28 threads)
 
 | P | Q | pythran | numpy | numba | jax | torch |
 |---:|---:|---:|---:|---:|---:|---:|
-| 1000 | 10000 | 28.2 ms (1.0×) | 134 ms (0.2×) | 75.3 ms (0.4×) | 5.96 ms (4.7×) | 4.48 ms (6.3×) |
+| 100 | 1000 | 0.59 ms (1.0×) | 2.09 ms (0.3×) | 0.59 ms (1.0×) | 0.27 ms (2.2×) | 0.66 ms (0.9×) |
+| 300 | 3000 | 9.52 ms (1.0×) | 32.8 ms (0.3×) | 16.5 ms (0.6×) | 7.93 ms (1.2×) | 2.79 ms (3.4×) |
+| 1000 | 10000 | 99.0 ms (1.0×) | 289 ms (0.3×) | 119 ms (0.8×) | 27.9 ms (3.5×) | 29.8 ms (3.3×) |
 
-## numba parallelism actually engages — but only reaches parity
+Cross-machine surprises:
+- **M4 Pro's single thread is faster in absolute ms** — pythran 58 ms vs the
+  i7's 99 ms at the largest size. The scalar RBF loop is latency-bound, and the
+  M4's per-core throughput wins.
+- **The i7's 28 threads help numba at small sizes** (1.0–1.1× vs pythran where
+  the Mac sits at 0.5×) — more cores amortize the `prange` overhead sooner.
+- **CPU `torch.compile` is much stronger on the Mac** (9.8×) than on the i7
+  here (3.3×); inductor's ARM codegen + the M4 memory system fuse this batch
+  better than the x86 path did.
 
-`P=1000, Q=10000`, thin_plate_spline, varying `NUMBA_NUM_THREADS`:
+## GPU — arrakis, 1× RTX 3090 Ti, faithful layer, large sizes
 
-| threads | numba | vs pythran |
-|---:|---:|---:|
-| 1 | 661 ms | 0.09× |
-| 14 | 73 ms | 0.80× |
+jax/torch on CUDA; pythran/numba are the CPU baselines on the same box.
 
-Single-threaded numba is **~11× slower than pythran**, and 14-way `prange` only
-claws it back to ~0.8×. The imperative kernel calls `np.linalg.norm(x - y[i])`
-`Q×P` times, each allocating a temp; pythran fuses that into a temp-free scalar
-loop. So numba spends its parallelism compensating for per-iteration codegen,
-not getting ahead.
+| P | Q | pythran (CPU) | numba (CPU) | jax (GPU) | torch (GPU) |
+|---:|---:|---:|---:|---:|---:|
+| 1000 | 10000 | 99.1 ms (1.0×) | 115 ms (0.9×) | 2.36 ms (41.9×) | **1.89 ms (52.4×)** |
+| 2000 | 20000 | 320 ms (1.0×) | 340 ms (0.9×) | 9.74 ms (32.9×) | 7.09 ms (45.1×) |
+| 4000 | 40000 | 1170 ms (1.0×) | 1088 ms (1.1×) | 29.7 ms (39.4×) | 27.6 ms (42.5×) |
+
+**This reproduces — and exceeds — the PR's headline.** The PR reports 5–40×
+for JAX/PyTorch JIT on GPU vs CPU; on one 3090 Ti we see **33–52×**. The Mac
+cannot show this at all (no CUDA), which is exactly why the cross-machine run
+matters.
 
 ## Takeaways
 
-1. **Vectorized + JIT wins on CPU.** jax (`jax.jit`) and torch (`torch.compile`)
-   run 3–10× over the pythran baseline by fusing the whole `(Q, P)` batch and
-   multithreading it. torch's inductor backend is fastest at scale (9.6×).
-2. **Eager numpy is the floor** (~0.4×): it materializes the `(Q, P, N)`
-   broadcast and a `(Q, P)` distance matrix with no fusion.
-3. **numba ≈ pythran, both AOT/loop-style**, and both lose to the vectorized
-   JITs here. numba needs all cores to match pythran's single core — a codegen
-   gap on `np.linalg.norm`-in-a-loop, not a parallelism gap.
-4. This is the PR's thesis on CPU: *write the kernel vectorized once, let a
-   tracing JIT compile it.* The big numbers in the PR are CUDA (5–40×) and are
-   **not reproducible here** — no GPU on this machine.
+1. **GPU is the whole story.** A single consumer 3090 Ti turns the vectorized
+   `compute_interpolation` into a 40–52× win over the best CPU baseline — the
+   PR's thesis, confirmed. torch (inductor→Triton) edges jax (XLA) on CUDA.
+2. **On CPU, "fastest" is hardware-dependent.** The vectorized JITs still win,
+   but by 3–10× not 40×, and the ranking between torch and jax flips between
+   the M4 and the i7. Absolute ms even flips for pythran (M4 faster).
+3. **numba ≈ pythran on both CPUs.** numba needs all cores just to reach
+   pythran's single-threaded AOT loop — a codegen gap on
+   `np.linalg.norm`-in-a-loop (each call allocates a temp pythran fuses away),
+   not a parallelism gap. It brings nothing on GPU (CPU-only here).
+4. **Eager numpy is the floor** (0.3–0.4×): it materializes the `(Q, P, N)`
+   broadcast with no fusion.
 
-Reproduce: `python run.py` (see `README.md`).
+Reproduce: `python run.py` (CPU) / `python run.py --device cuda --big`
+(GPU). See `README.md`.

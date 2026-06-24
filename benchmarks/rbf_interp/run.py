@@ -38,13 +38,13 @@ def time_run(run, repeats, warmup):
     return statistics.median(ts), statistics.pstdev(ts)
 
 
-def bench_size(make, P, Q, kernel, degree, names, repeats, warmup):
+def bench_size(make, P, Q, kernel, degree, names, repeats, warmup, device):
     p = make(P, Q, kernel=kernel, degree=degree)
-    ref = backends.build_numpy(p)()
+    ref = backends.build_numpy(p)()              # numpy/cpu reference for correctness
     out = {}
     for name in names:
         try:
-            run = backends.BACKENDS[name](p)
+            run = backends.BACKENDS[name](p, device)
             first = np.asarray(run())
             ok = np.allclose(first, ref, atol=1e-6, rtol=1e-6)
             med, std = time_run(run, repeats, warmup)
@@ -76,13 +76,13 @@ def fmt_table(rows, names, baseline="pythran"):
     return "\n".join(lines)
 
 
-def run_layer(layer, sizes, kernel, degree, names, repeats, warmup):
+def run_layer(layer, sizes, kernel, degree, names, repeats, warmup, device):
     make = problems.make_minimal if layer == "minimal" else problems.make_faithful
     rows = []
     for P, Q in sizes:
         print(f"  {layer} P={P} Q={Q} ...", flush=True)
         rows.append((P, Q, bench_size(make, P, Q, kernel, degree,
-                                      names, repeats, warmup)))
+                                      names, repeats, warmup, device)))
     return rows
 
 
@@ -97,22 +97,33 @@ def main():
     ap.add_argument("--repeats", type=int, default=15)
     ap.add_argument("--warmup", type=int, default=3)
     ap.add_argument("--backends", default=",".join(ORDER))
+    ap.add_argument("--device", choices=["cpu", "cuda"], default="cpu",
+                    help="device for jax/torch; numpy/numba/pythran are always CPU")
+    ap.add_argument("--big", action="store_true",
+                    help="larger sizes where the GPU is not launch-overhead-bound")
     args = ap.parse_args()
 
+    # jax reads its platform from this env at import time (build_jax, below).
+    os.environ["JAX_PLATFORMS"] = args.device if args.device == "cpu" else "cuda"
+
     names = [n for n in ORDER if n in args.backends.split(",")]
-    sizes = [(100, 1000), (300, 3000), (1000, 10000)]
+    sizes = ([(1000, 10000), (2000, 20000), (4000, 40000)] if args.big
+             else [(100, 1000), (300, 3000), (1000, 10000)])
     layers = ["minimal", "faithful"] if args.layer == "both" else [args.layer]
 
-    env = (f"numba threads={numba.get_num_threads()}  torch threads={torch.get_num_threads()}  "
-           f"OMP_NUM_THREADS={os.environ.get('OMP_NUM_THREADS', 'unset')}")
+    gpu = (f"  gpu={torch.cuda.get_device_name(0)}"
+           if args.device == "cuda" and torch.cuda.is_available() else "")
+    env = (f"device={args.device}{gpu}  numba threads={numba.get_num_threads()}  "
+           f"torch threads={torch.get_num_threads()}")
     header = (f"RBF eval benchmark (scipy PR #23447) -- kernel={args.kernel} degree={args.degree}\n"
-              f"{env}\nspeedup vs pythran; '!' = output mismatch vs numpy\n")
+              f"{env}\njax/torch on {args.device}; numpy/numba/pythran always CPU; "
+              f"speedup vs pythran(CPU); '!' = mismatch vs numpy\n")
     print(header)
 
     out = [header]
     for layer in layers:
         rows = run_layer(layer, sizes, args.kernel, args.degree,
-                         names, args.repeats, args.warmup)
+                         names, args.repeats, args.warmup, args.device)
         block = f"\n[{layer}]\n" + fmt_table(rows, names)
         print(block)
         out.append(block)

@@ -28,7 +28,7 @@ class Problem:
     coeffs: np.ndarray   # (P + R,)
 
 
-def build_numpy(p):
+def build_numpy(p, device="cpu"):
     from array_api_compat import array_namespace
     xp = array_namespace(p.x)
 
@@ -39,7 +39,7 @@ def build_numpy(p):
     return run
 
 
-def build_numba(p):
+def build_numba(p, device="cpu"):
     def run():
         return np.asarray(kernel_numba.compute_interpolation(
             p.x, p.y, p.kernel, p.epsilon, p.powers, p.shift, p.scale,
@@ -47,7 +47,7 @@ def build_numba(p):
     return run
 
 
-def build_pythran(p):
+def build_pythran(p, device="cpu"):
     import rbf_pythran
     def run():
         vec = rbf_pythran._build_evaluation_coefficients(
@@ -56,7 +56,8 @@ def build_pythran(p):
     return run
 
 
-def build_jax(p):
+def build_jax(p, device="cpu"):
+    # jax device follows the JAX_PLATFORMS env set by run.py before this import.
     import jax
     import jax.numpy as jnp
     from array_api_compat import array_namespace
@@ -76,24 +77,27 @@ def build_jax(p):
     return run
 
 
-def build_torch(p):
+def build_torch(p, device="cpu"):
     import torch
     from array_api_compat import array_namespace
 
     f64 = torch.float64
-    x = torch.tensor(p.x, dtype=f64)
-    y = torch.tensor(p.y, dtype=f64)
-    powers = torch.tensor(p.powers, dtype=torch.int64)
-    shift = torch.tensor(p.shift, dtype=f64)
-    scale = torch.tensor(p.scale, dtype=f64)
-    coeffs = torch.tensor(p.coeffs, dtype=f64)
+    x = torch.tensor(p.x, dtype=f64, device=device)
+    y = torch.tensor(p.y, dtype=f64, device=device)
+    powers = torch.tensor(p.powers, dtype=torch.int64, device=device)
+    shift = torch.tensor(p.shift, dtype=f64, device=device)
+    scale = torch.tensor(p.scale, dtype=f64, device=device)
+    coeffs = torch.tensor(p.coeffs, dtype=f64, device=device)
     xp = array_namespace(x)
     fn = torch.compile(kernel_xp.compute_interpolation,
                        fullgraph=True, dynamic=True)
+    cuda = device == "cuda"
 
     def run():
         with torch.no_grad():
             out = fn(x, y, p.kernel, p.epsilon, powers, shift, scale, coeffs, xp)
+        if cuda:                       # wait for the async kernel before stopping the clock
+            torch.cuda.synchronize()
         return out.cpu().numpy()
     return run
 
