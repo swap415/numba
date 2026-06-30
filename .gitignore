@@ -5,6 +5,7 @@
 *.pyd
 *.pdb
 *.egg-info
+.eggs/
 *.sw[po]
 *.out
 *.ll
