@@ -966,6 +966,10 @@ class TypeInferer(object):
 
         self.typevars = TypeVarMap()
         self.typevars.set_context(context)
+        # Cache for get_state_token(): typevars are only ever added, never
+        # removed or renamed, so the sorted name list is reusable as long as
+        # the typevar count hasn't changed.
+        self._sorted_typevar_names = None
         self.constraints = ConstraintNetwork()
         self.warnings = warnings
 
@@ -1391,7 +1395,10 @@ https://numba.readthedocs.io/en/stable/user/troubleshoot.html#my-code-has-an-unt
         """The algorithm is monotonic.  It can only grow or "refine" the
         typevar map.
         """
-        return [tv.type for name, tv in sorted(self.typevars.items())]
+        if (self._sorted_typevar_names is None or
+                len(self._sorted_typevar_names) != len(self.typevars)):
+            self._sorted_typevar_names = sorted(self.typevars)
+        return [self.typevars[k].type for k in self._sorted_typevar_names]
 
     def constrain_statement(self, inst):
         if isinstance(inst, ir.Assign):

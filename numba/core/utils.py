@@ -309,8 +309,18 @@ def order_by_target_specificity(target, templates, fnkey=''):
     exception message in the case that there's no usable templates for the
     current "target".
     """
+    # `target` and `templates` are invariant for the lifetime of a given
+    # Function/AttributeTemplate registration, but this is called on every
+    # call-site/attribute resolution during type inference's fixed-point
+    # loop, so the (target, templates) -> order result is cached.
+    return _order_by_target_specificity_cached(
+        target, tuple(templates), fnkey)
+
+
+@functools.lru_cache(maxsize=None)
+def _order_by_target_specificity_cached(target, templates, fnkey):
     # No templates... return early!
-    if templates == []:
+    if not templates:
         return []
 
     from numba.core.target_extension import target_registry
