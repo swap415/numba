@@ -987,6 +987,10 @@ class TypeInferer(object):
             self.debug = NullDebug()
 
         self._skip_recursion = False
+        # Monotonic counter incremented on every type-variable change.
+        # Used by get_state_token() instead of building a full sorted list
+        # each propagation iteration (O(1) vs O(N log N)).
+        self._type_token = 0
 
     def copy(self, skip_recursion=False):
         clone = TypeInferer(self.context, self.func_ir, self.warnings)
@@ -1094,6 +1098,7 @@ class TypeInferer(object):
         oldty = tv.type
         unified = tv.add_type(tp, loc=loc)
         if unified != oldty:
+            self._type_token += 1
             self.propagate_refined_type(var, unified)
 
     def add_calltype(self, inst, signature):
@@ -1101,11 +1106,17 @@ class TypeInferer(object):
         self.calltypes[inst] = signature
 
     def copy_type(self, src_var, dest_var, loc):
+        old_type = self.typevars[dest_var].type
         self.typevars[dest_var].union(self.typevars[src_var], loc=loc)
+        if self.typevars[dest_var].type != old_type:
+            self._type_token += 1
 
     def lock_type(self, var, tp, loc, literal_value=NOTSET):
         tv = self.typevars[var]
+        old_type = tv.type
         tv.lock(tp, loc=loc, literal_value=literal_value)
+        if tv.type != old_type:
+            self._type_token += 1
 
     def propagate_refined_type(self, updated_var, updated_type):
         source_constraint = self.refine_map.get(updated_var)
@@ -1391,7 +1402,7 @@ https://numba.readthedocs.io/en/stable/user/troubleshoot.html#my-code-has-an-unt
         """The algorithm is monotonic.  It can only grow or "refine" the
         typevar map.
         """
-        return [tv.type for name, tv in sorted(self.typevars.items())]
+        return self._type_token
 
     def constrain_statement(self, inst):
         if isinstance(inst, ir.Assign):
