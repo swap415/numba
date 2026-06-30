@@ -2401,24 +2401,18 @@ def _np_clip_impl(a, a_min, a_max, out):
     # Both a_min and a_max are numpy arrays
     ret = np.empty_like(a) if out is None else out
     a_b, a_min_b, a_max_b = np.broadcast_arrays(a, a_min, a_max)
-    for index in np.ndindex(a_b.shape):
-        val_a = a_b[index]
-        val_a_min = a_min_b[index]
-        val_a_max = a_max_b[index]
-        ret[index] = min(max(val_a, val_a_min), val_a_max)
-
+    for i in range(a_b.size):
+        ret.flat[i] = min(max(a_b.flat[i], a_min_b.flat[i]), a_max_b.flat[i])
     return ret
 
 
 @register_jitable
 def _np_clip_impl_none(a, b, use_min, out):
-    for index in np.ndindex(a.shape):
-        val_a = a[index]
-        val_b = b[index]
+    for i in range(a.size):
         if use_min:
-            out[index] = min(val_a, val_b)
+            out.flat[i] = min(a.flat[i], b.flat[i])
         else:
-            out[index] = max(val_a, val_b)
+            out.flat[i] = max(a.flat[i], b.flat[i])
     return out
 
 
@@ -2457,63 +2451,51 @@ def np_clip(a, a_min, a_max, out=None):
 
     if a_min_is_scalar and a_max_is_scalar:
         def np_clip_ss(a, a_min, a_max, out=None):
-            # a_min and a_max are scalars
-            # since their shape will be empty
-            # so broadcasting is not needed at all
+            # a_min and a_max are scalars — no broadcasting needed
             ret = np.empty_like(a) if out is None else out
-            for index in np.ndindex(a.shape):
-                val_a = a[index]
-                ret[index] = min(max(val_a, a_min), a_max)
-
+            for i in range(a.size):
+                ret.flat[i] = min(max(a.flat[i], a_min), a_max)
             return ret
 
         return np_clip_ss
     elif a_min_is_scalar and not a_max_is_scalar:
         if a_max_is_none:
             def np_clip_sn(a, a_min, a_max, out=None):
-                # a_min is a scalar
-                # since its shape will be empty
-                # so broadcasting is not needed at all
+                # a_min is a scalar, a_max is None — no broadcast needed
                 ret = np.empty_like(a) if out is None else out
-                for index in np.ndindex(a.shape):
-                    val_a = a[index]
-                    ret[index] = max(val_a, a_min)
-
+                for i in range(a.size):
+                    ret.flat[i] = max(a.flat[i], a_min)
                 return ret
 
             return np_clip_sn
         else:
             def np_clip_sa(a, a_min, a_max, out=None):
-                # a_min is a scalar
-                # since its shape will be empty
-                # broadcast it to shape of a
-                # by using np.full_like
-                a_min_full = np.full_like(a, a_min)
-                return _np_clip_impl(a, a_min_full, a_max, out)
+                # a_min is a scalar, a_max is an array — broadcast only a_max
+                ret = np.empty_like(a) if out is None else out
+                a_b, a_max_b = np.broadcast_arrays(a, a_max)
+                for i in range(a_b.size):
+                    ret.flat[i] = min(max(a_b.flat[i], a_min), a_max_b.flat[i])
+                return ret
 
             return np_clip_sa
     elif not a_min_is_scalar and a_max_is_scalar:
         if a_min_is_none:
             def np_clip_ns(a, a_min, a_max, out=None):
-                # a_max is a scalar
-                # since its shape will be empty
-                # so broadcasting is not needed at all
+                # a_max is a scalar, a_min is None — no broadcast needed
                 ret = np.empty_like(a) if out is None else out
-                for index in np.ndindex(a.shape):
-                    val_a = a[index]
-                    ret[index] = min(val_a, a_max)
-
+                for i in range(a.size):
+                    ret.flat[i] = min(a.flat[i], a_max)
                 return ret
 
             return np_clip_ns
         else:
             def np_clip_as(a, a_min, a_max, out=None):
-                # a_max is a scalar
-                # since its shape will be empty
-                # broadcast it to shape of a
-                # by using np.full_like
-                a_max_full = np.full_like(a, a_max)
-                return _np_clip_impl(a, a_min, a_max_full, out)
+                # a_max is a scalar, a_min is an array — broadcast only a_min
+                ret = np.empty_like(a) if out is None else out
+                a_b, a_min_b = np.broadcast_arrays(a, a_min)
+                for i in range(a_b.size):
+                    ret.flat[i] = min(max(a_b.flat[i], a_min_b.flat[i]), a_max)
+                return ret
 
             return np_clip_as
     else:
