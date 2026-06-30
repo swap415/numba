@@ -23,6 +23,12 @@ from numba.core.cpu_options import InlineOptions
 _inline_info = namedtuple('inline_info',
                           'func_ir typemap calltypes signature')
 
+# Cache inspect.signature() results: the same function object is inspected
+# repeatedly (once per unique type combination) during overload dispatch.
+@functools.lru_cache(maxsize=None)
+def _cached_signature(func):
+    return inspect.signature(func)
+
 
 class Signature(object):
     """
@@ -523,8 +529,8 @@ class _OverloadFunctionTemplate(AbstractTemplate):
 
     def _validate_sigs(self, typing_func, impl_func):
         # check that the impl func and the typing func have the same signature!
-        typing_sig = utils.pysignature(typing_func)
-        impl_sig = utils.pysignature(impl_func)
+        typing_sig = _cached_signature(typing_func)
+        impl_sig = _cached_signature(impl_func)
         # the typing signature is considered golden and must be adhered to by
         # the implementation...
         # Things that are valid:
@@ -722,6 +728,11 @@ class _OverloadFunctionTemplate(AbstractTemplate):
 
     def _get_jit_decorator(self):
         """Gets a jit decorator suitable for the current target"""
+        # Cache on the class: metadata is a class-level attribute and the
+        # jitter lookup is deterministic per (target_str, context_type).
+        cached = type(self).__dict__.get('_cached_jitter')
+        if cached is not None:
+            return cached
 
         from numba.core.target_extension import (target_registry,
                                                  get_local_target,
@@ -751,6 +762,7 @@ class _OverloadFunctionTemplate(AbstractTemplate):
         if jitter is None:
             raise ValueError("Cannot find a suitable jit decorator")
 
+        type(self)._cached_jitter = jitter
         return jitter
 
     def _build_impl(self, cache_key, args, kws):
@@ -781,7 +793,7 @@ class _OverloadFunctionTemplate(AbstractTemplate):
         jitter = self._get_jit_decorator()
 
         # Get the overload implementation for the given types
-        ov_sig = inspect.signature(self._overload_func)
+        ov_sig = _cached_signature(self._overload_func)
         try:
             ov_sig.bind(*args, **kws)
         except TypeError as e:

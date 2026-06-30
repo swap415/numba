@@ -3,6 +3,7 @@ Implementation of math operations on Array objects.
 """
 
 
+import functools
 import math
 from collections import namedtuple
 import operator
@@ -245,6 +246,17 @@ def gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero):
     return inner
 
 
+@functools.lru_cache(maxsize=None)
+def _make_sum_axis_compiled(is_axis_const, const_axis_val, op, zero_type):
+    """Cache register_jitable(gen_sum_axis_impl(...)) keyed on parameters.
+
+    Avoids re-creating and re-JIT-compiling an identical closure each time a
+    new array dtype but same axis/op combination is lowered.
+    """
+    return register_jitable(
+        gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero_type(0)))
+
+
 @lower_builtin(np.sum, types.Array, types.intp, types.DTypeSpec)
 @lower_builtin(np.sum, types.Array, types.IntegerLiteral, types.DTypeSpec)
 @lower_builtin("array.sum", types.Array, types.intp, types.DTypeSpec)
@@ -278,8 +290,8 @@ def array_sum_axis_dtype(context, builder, sig, args):
         sig = sig.replace(args=[ty_array, ty_axis, ty_dtype])
         is_axis_const = True
 
-    gen_impl = gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero)
-    compiled = register_jitable(gen_impl)
+    compiled = _make_sum_axis_compiled(is_axis_const, const_axis_val, op,
+                                       type(zero))
 
     def array_sum_impl_axis(arr, axis, dtype):
         return compiled(arr, axis)
@@ -338,8 +350,8 @@ def array_sum_axis(context, builder, sig, args):
         sig = sig.replace(args=[ty_array, ty_axis])
         is_axis_const = True
 
-    gen_impl = gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero)
-    compiled = register_jitable(gen_impl)
+    compiled = _make_sum_axis_compiled(is_axis_const, const_axis_val, op,
+                                       type(zero))
 
     def array_sum_impl_axis(arr, axis):
         return compiled(arr, axis)

@@ -2457,28 +2457,22 @@ def np_clip(a, a_min, a_max, out=None):
 
     if a_min_is_scalar and a_max_is_scalar:
         def np_clip_ss(a, a_min, a_max, out=None):
-            # a_min and a_max are scalars
-            # since their shape will be empty
-            # so broadcasting is not needed at all
+            # a_min and a_max are scalars; use flat iteration to avoid the
+            # tuple-of-indices overhead from np.ndindex (simpler IR, faster
+            # compile and runtime for both C- and F-contiguous arrays).
             ret = np.empty_like(a) if out is None else out
-            for index in np.ndindex(a.shape):
-                val_a = a[index]
-                ret[index] = min(max(val_a, a_min), a_max)
-
+            for i in range(a.size):
+                ret.flat[i] = min(max(a.flat[i], a_min), a_max)
             return ret
 
         return np_clip_ss
     elif a_min_is_scalar and not a_max_is_scalar:
         if a_max_is_none:
             def np_clip_sn(a, a_min, a_max, out=None):
-                # a_min is a scalar
-                # since its shape will be empty
-                # so broadcasting is not needed at all
+                # a_min is a scalar; flat iteration (see np_clip_ss comment).
                 ret = np.empty_like(a) if out is None else out
-                for index in np.ndindex(a.shape):
-                    val_a = a[index]
-                    ret[index] = max(val_a, a_min)
-
+                for i in range(a.size):
+                    ret.flat[i] = max(a.flat[i], a_min)
                 return ret
 
             return np_clip_sn
@@ -2495,14 +2489,10 @@ def np_clip(a, a_min, a_max, out=None):
     elif not a_min_is_scalar and a_max_is_scalar:
         if a_min_is_none:
             def np_clip_ns(a, a_min, a_max, out=None):
-                # a_max is a scalar
-                # since its shape will be empty
-                # so broadcasting is not needed at all
+                # a_max is a scalar; flat iteration (see np_clip_ss comment).
                 ret = np.empty_like(a) if out is None else out
-                for index in np.ndindex(a.shape):
-                    val_a = a[index]
-                    ret[index] = min(val_a, a_max)
-
+                for i in range(a.size):
+                    ret.flat[i] = min(a.flat[i], a_max)
                 return ret
 
             return np_clip_ns
