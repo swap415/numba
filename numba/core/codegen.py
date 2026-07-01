@@ -658,8 +658,13 @@ class CPUCodeLibrary(CodeLibrary):
         ll_module.data_layout = self._codegen._data_layout
         for func in ll_module.functions:
             # Run function-level optimizations to reduce memory usage and improve
-            # module-level optimization.
-            fpm, pb = self._codegen._function_pass_manager()
+            # module-level optimization. Use the same (cheap) opt level as the
+            # module-level pre-pass below: the module is fully re-optimized at
+            # config.OPT afterwards in _optimize_final_module, so running this
+            # per-function pass at the default (also config.OPT) level just
+            # redoes the same expensive O3 work twice per compile.
+            fpm, pb = self._codegen._function_pass_manager(
+                opt=self._codegen._opt_level)
             k = f"Function passes on {func.name!r}"
             with self._recorded_timings.record(k, pb):
                 fpm.run(func, pb)
