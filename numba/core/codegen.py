@@ -29,8 +29,9 @@ def _is_x86(triple):
     return arch in _x86arch
 
 
-def _parse_refprune_flags():
-    """Parse refprune flags from the `config`.
+@functools.lru_cache(maxsize=None)
+def _parse_refprune_flags_cached(flags_str):
+    """Parse a refprune flags string.
 
     Invalid values are ignored an warn via a `NumbaInvalidConfigWarning`
     category.
@@ -39,7 +40,7 @@ def _parse_refprune_flags():
     -------
     flags : llvmlite.binding.RefPruneSubpasses
     """
-    flags = config.LLVM_REFPRUNE_FLAGS.split(',')
+    flags = flags_str.split(',')
     if not flags:
         return 0
     val = 0
@@ -51,6 +52,23 @@ def _parse_refprune_flags():
             warnings.warn(f"invalid refprune flags {item!r}",
                           NumbaInvalidConfigWarning)
     return val
+
+
+def _parse_refprune_flags():
+    """Parse refprune flags from the `config`.
+
+    This is called once per function and once per module on every
+    compilation (see ``_function_pass_manager``/``_module_pass_manager``
+    below), so the pure parse of ``config.LLVM_REFPRUNE_FLAGS`` is memoized
+    by its cached helper above. Keyed on the flags string (not cached
+    unconditionally) so ``override_config('LLVM_REFPRUNE_FLAGS', ...)``
+    in tests still takes effect.
+
+    Returns
+    -------
+    flags : llvmlite.binding.RefPruneSubpasses
+    """
+    return _parse_refprune_flags_cached(config.LLVM_REFPRUNE_FLAGS)
 
 
 def dump(header, body, lang):
