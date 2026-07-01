@@ -5057,7 +5057,11 @@ def _in1d_impl(ar1, ar2, assume_unique=False, invert=False):
     if not assume_unique:
         # Equivalent to ar1, inv_idx = np.unique(ar1, return_inverse=True)
         # https://github.com/numpy/numpy/blob/03b62604eead0f7d279a5a4c094743eb29647368/numpy/lib/arraysetops.py#L358C8-L358C8 # noqa: E501
-        order1 = np.argsort(ar1)
+        # kind='mergesort' here (matching the stable sort used below) so a
+        # second sort-network implementation (quicksort) doesn't also need
+        # to be compiled; order1 has no stability requirement, so any full
+        # sort is correct, but reusing 'mergesort' avoids doubling codegen.
+        order1 = np.argsort(ar1, kind='mergesort')
         aux = ar1[order1]
         mask = np.empty(aux.shape, dtype=np.bool_)
         mask[:1] = True
