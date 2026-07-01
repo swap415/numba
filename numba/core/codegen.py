@@ -656,10 +656,15 @@ class CPUCodeLibrary(CodeLibrary):
         """
         # Enforce data layout to enable layout-specific optimizations
         ll_module.data_layout = self._codegen._data_layout
+        # Build the function pass manager once and reuse it for every function
+        # in the module instead of rebuilding it (and skipping declarations,
+        # which have no body to optimize) on each iteration.
+        fpm, pb = self._codegen._function_pass_manager()
         for func in ll_module.functions:
+            if func.is_declaration:
+                continue
             # Run function-level optimizations to reduce memory usage and improve
             # module-level optimization.
-            fpm, pb = self._codegen._function_pass_manager()
             k = f"Function passes on {func.name!r}"
             with self._recorded_timings.record(k, pb):
                 fpm.run(func, pb)
