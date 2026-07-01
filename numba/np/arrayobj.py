@@ -4821,7 +4821,11 @@ def numpy_diagflat(v, k=0):
     return impl
 
 
+@functools.lru_cache(maxsize=None)
 def generate_getitem_setitem_with_axis(ndim, kind):
+    # exec() below builds a brand-new code object on every call; memoize
+    # so repeated (ndim, kind) pairs reuse the same compiled Dispatcher
+    # instead of re-lowering an identical function from scratch each time.
     assert kind in ('getitem', 'setitem')
 
     if kind == 'getitem':

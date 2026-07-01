@@ -3,6 +3,7 @@ Implementation of math operations on Array objects.
 """
 
 
+import functools
 import math
 from collections import namedtuple
 import operator
@@ -245,6 +246,17 @@ def gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero):
     return inner
 
 
+@functools.lru_cache(maxsize=None)
+def _get_sum_axis_impl(is_axis_const, const_axis_val, op, zero, zero_type):
+    # gen_sum_axis_impl()/register_jitable() build a brand-new Dispatcher on
+    # every call; memoize so repeated (axis, dtype) signatures reuse one
+    # compiled subroutine instead of re-lowering it from scratch each time.
+    # zero_type is part of the key because e.g. int(0) == float(0) in Python
+    # but they must not share a cached (and dtype-specific) subroutine.
+    return register_jitable(gen_sum_axis_impl(is_axis_const, const_axis_val,
+                                              op, zero))
+
+
 @lower_builtin(np.sum, types.Array, types.intp, types.DTypeSpec)
 @lower_builtin(np.sum, types.Array, types.IntegerLiteral, types.DTypeSpec)
 @lower_builtin("array.sum", types.Array, types.intp, types.DTypeSpec)
@@ -278,8 +290,8 @@ def array_sum_axis_dtype(context, builder, sig, args):
         sig = sig.replace(args=[ty_array, ty_axis, ty_dtype])
         is_axis_const = True
 
-    gen_impl = gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero)
-    compiled = register_jitable(gen_impl)
+    compiled = _get_sum_axis_impl(is_axis_const, const_axis_val, op, zero,
+                                  type(zero))
 
     def array_sum_impl_axis(arr, axis, dtype):
         return compiled(arr, axis)
@@ -338,8 +350,8 @@ def array_sum_axis(context, builder, sig, args):
         sig = sig.replace(args=[ty_array, ty_axis])
         is_axis_const = True
 
-    gen_impl = gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero)
-    compiled = register_jitable(gen_impl)
+    compiled = _get_sum_axis_impl(is_axis_const, const_axis_val, op, zero,
+                                  type(zero))
 
     def array_sum_impl_axis(arr, axis):
         return compiled(arr, axis)
