@@ -7,7 +7,7 @@ import unittest
 from numba import jit, njit, from_dtype, typeof
 from numba.core.errors import TypingError
 from numba.core import types, errors
-from numba.tests.support import TestCase, MemoryLeakMixin
+from numba.tests.support import TestCase, MemoryLeakMixin, override_config
 
 enable_pyobj_flags = {'forceobj': True}
 
@@ -849,76 +849,80 @@ class TestArrayManipulation(MemoryLeakMixin, TestCase):
                       str(raises.exception))
 
     def test_fill_diagonal_basic(self):
-        pyfunc = numpy_fill_diagonal
-        cfunc = jit(nopython=True)(pyfunc)
+        # ~60 specializations compiled here purely for correctness checking
+        # (assertPreciseEqual); OPT=0 skips the costly O3 pass per
+        # specialization with no change in what's verified.
+        with override_config('OPT', 0):
+            pyfunc = numpy_fill_diagonal
+            cfunc = jit(nopython=True)(pyfunc)
 
-        def _shape_variations(n):
-            # square
-            yield (n, n)
-            # tall and thin
-            yield (2 * n, n)
-            # short and fat
-            yield (n, 2 * n)
-            # a bit taller than wide; odd numbers of rows and cols
-            yield ((2 * n + 1), (2 * n - 1))
-            # 4d, all dimensions same
-            yield (n, n, n, n)
-            # weird edge case
-            yield (1, 1, 1)
+            def _shape_variations(n):
+                # square
+                yield (n, n)
+                # tall and thin
+                yield (2 * n, n)
+                # short and fat
+                yield (n, 2 * n)
+                # a bit taller than wide; odd numbers of rows and cols
+                yield ((2 * n + 1), (2 * n - 1))
+                # 4d, all dimensions same
+                yield (n, n, n, n)
+                # weird edge case
+                yield (1, 1, 1)
 
-        def _val_variations():
-            yield 1
-            yield 3.142
-            yield np.nan
-            yield -np.inf
-            yield True
-            yield np.arange(4)
-            yield (4,)
-            yield [8, 9]
-            yield np.arange(54).reshape(9, 3, 2, 1)  # contiguous C
-            yield np.asfortranarray(np.arange(9).reshape(3, 3))  # contiguous F
-            yield np.arange(9).reshape(3, 3)[::-1]  # non-contiguous
+            def _val_variations():
+                yield 1
+                yield 3.142
+                yield np.nan
+                yield -np.inf
+                yield True
+                yield np.arange(4)
+                yield (4,)
+                yield [8, 9]
+                yield np.arange(54).reshape(9, 3, 2, 1)  # contiguous C
+                yield np.asfortranarray(np.arange(9).reshape(3, 3))  # contiguous F
+                yield np.arange(9).reshape(3, 3)[::-1]  # non-contiguous
 
-        # contiguous arrays
-        def _multi_dimensional_array_variations(n):
-            for shape in _shape_variations(n):
-                yield np.zeros(shape, dtype=np.float64)
-                yield np.asfortranarray(np.ones(shape, dtype=np.float64))
+            # contiguous arrays
+            def _multi_dimensional_array_variations(n):
+                for shape in _shape_variations(n):
+                    yield np.zeros(shape, dtype=np.float64)
+                    yield np.asfortranarray(np.ones(shape, dtype=np.float64))
 
-        # non-contiguous arrays
-        def _multi_dimensional_array_variations_strided(n):
-            for shape in _shape_variations(n):
-                tmp = np.zeros(tuple([x * 2 for x in shape]), dtype=np.float64)
-                slicer = tuple(slice(0, x * 2, 2) for x in shape)
-                yield tmp[slicer]
+            # non-contiguous arrays
+            def _multi_dimensional_array_variations_strided(n):
+                for shape in _shape_variations(n):
+                    tmp = np.zeros(tuple([x * 2 for x in shape]), dtype=np.float64)
+                    slicer = tuple(slice(0, x * 2, 2) for x in shape)
+                    yield tmp[slicer]
 
-        def _check_fill_diagonal(arr, val):
-            for wrap in None, True, False:
-                a = arr.copy()
-                b = arr.copy()
+            def _check_fill_diagonal(arr, val):
+                for wrap in None, True, False:
+                    a = arr.copy()
+                    b = arr.copy()
 
-                if wrap is None:
-                    params = {}
-                else:
-                    params = {'wrap': wrap}
+                    if wrap is None:
+                        params = {}
+                    else:
+                        params = {'wrap': wrap}
 
-                pyfunc(a, val, **params)
-                cfunc(b, val, **params)
-                self.assertPreciseEqual(a, b)
+                    pyfunc(a, val, **params)
+                    cfunc(b, val, **params)
+                    self.assertPreciseEqual(a, b)
 
-        for arr in _multi_dimensional_array_variations(3):
-            for val in _val_variations():
-                _check_fill_diagonal(arr, val)
+            for arr in _multi_dimensional_array_variations(3):
+                for val in _val_variations():
+                    _check_fill_diagonal(arr, val)
 
-        for arr in _multi_dimensional_array_variations_strided(3):
-            for val in _val_variations():
-                _check_fill_diagonal(arr, val)
+            for arr in _multi_dimensional_array_variations_strided(3):
+                for val in _val_variations():
+                    _check_fill_diagonal(arr, val)
 
-        # non-numeric input arrays
-        arr = np.array([True] * 9).reshape(3, 3)
-        _check_fill_diagonal(arr, False)
-        _check_fill_diagonal(arr, [False, True, False])
-        _check_fill_diagonal(arr, np.array([True, False, True]))
+            # non-numeric input arrays
+            arr = np.array([True] * 9).reshape(3, 3)
+            _check_fill_diagonal(arr, False)
+            _check_fill_diagonal(arr, [False, True, False])
+            _check_fill_diagonal(arr, np.array([True, False, True]))
 
     def test_fill_diagonal_exception_cases(self):
         pyfunc = numpy_fill_diagonal

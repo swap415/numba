@@ -12,7 +12,7 @@ from numba.core.errors import TypingError, NumbaValueError
 from numba.np.numpy_support import as_dtype, numpy_version
 from numba.tests.support import (TestCase, MemoryLeakMixin,
                                  needs_blas, skip_if_numpy_2,
-                                 expected_failure_np2)
+                                 expected_failure_np2, override_config)
 
 TIMEDELTA_M = 'timedelta64[M]'
 TIMEDELTA_Y = 'timedelta64[Y]'
@@ -1005,34 +1005,38 @@ class TestArrayMethods(MemoryLeakMixin, TestCase):
 
     def test_np_where_numpy_basic(self):
         # https://github.com/numpy/numpy/blob/fe2bb380fd9a084b622ff3f00cb6f245e8c1a10e/numpy/core/tests/test_multiarray.py#L8670-L8694
-        pyfunc = np_where_3
-        cfunc = jit(nopython=True)(pyfunc)
+        # ~36 specializations compiled here purely for correctness checking;
+        # OPT=0 skips the costly O3 pass per specialization with no change
+        # in what's verified.
+        with override_config('OPT', 0):
+            pyfunc = np_where_3
+            cfunc = jit(nopython=True)(pyfunc)
 
-        # skipping unsupported dtypes:
-        # np.longdouble, np.clongdouble
-        dts = [bool, np.int16, np.int32, np.int64, np.double, np.complex128]
-        for dt in dts:
-            c = np.ones(53, dtype=bool)
-            np.testing.assert_equal(cfunc( c, dt(0), dt(1)), dt(0))
-            np.testing.assert_equal(cfunc(~c, dt(0), dt(1)), dt(1))
-            np.testing.assert_equal(cfunc(True, dt(0), dt(1)), dt(0))
-            np.testing.assert_equal(cfunc(False, dt(0), dt(1)), dt(1))
-            d = np.ones_like(c).astype(dt)
-            e = np.zeros_like(d)
-            r = d.astype(dt)
-            c[7] = False
-            r[7] = e[7]
-            np.testing.assert_equal(cfunc(c, e, e), e)
-            np.testing.assert_equal(cfunc(c, d, e), r)
-            np.testing.assert_equal(cfunc(c, d, e[0]), r)
-            np.testing.assert_equal(cfunc(c, d[0], e), r)
-            np.testing.assert_equal(cfunc(c[::2], d[::2], e[::2]), r[::2])
-            np.testing.assert_equal(cfunc(c[1::2], d[1::2], e[1::2]), r[1::2])
-            np.testing.assert_equal(cfunc(c[::3], d[::3], e[::3]), r[::3])
-            np.testing.assert_equal(cfunc(c[1::3], d[1::3], e[1::3]), r[1::3])
-            np.testing.assert_equal(cfunc(c[::-2], d[::-2], e[::-2]), r[::-2])
-            np.testing.assert_equal(cfunc(c[::-3], d[::-3], e[::-3]), r[::-3])
-            np.testing.assert_equal(cfunc(c[1::-3], d[1::-3], e[1::-3]), r[1::-3])
+            # skipping unsupported dtypes:
+            # np.longdouble, np.clongdouble
+            dts = [bool, np.int16, np.int32, np.int64, np.double, np.complex128]
+            for dt in dts:
+                c = np.ones(53, dtype=bool)
+                np.testing.assert_equal(cfunc( c, dt(0), dt(1)), dt(0))
+                np.testing.assert_equal(cfunc(~c, dt(0), dt(1)), dt(1))
+                np.testing.assert_equal(cfunc(True, dt(0), dt(1)), dt(0))
+                np.testing.assert_equal(cfunc(False, dt(0), dt(1)), dt(1))
+                d = np.ones_like(c).astype(dt)
+                e = np.zeros_like(d)
+                r = d.astype(dt)
+                c[7] = False
+                r[7] = e[7]
+                np.testing.assert_equal(cfunc(c, e, e), e)
+                np.testing.assert_equal(cfunc(c, d, e), r)
+                np.testing.assert_equal(cfunc(c, d, e[0]), r)
+                np.testing.assert_equal(cfunc(c, d[0], e), r)
+                np.testing.assert_equal(cfunc(c[::2], d[::2], e[::2]), r[::2])
+                np.testing.assert_equal(cfunc(c[1::2], d[1::2], e[1::2]), r[1::2])
+                np.testing.assert_equal(cfunc(c[::3], d[::3], e[::3]), r[::3])
+                np.testing.assert_equal(cfunc(c[1::3], d[1::3], e[1::3]), r[1::3])
+                np.testing.assert_equal(cfunc(c[::-2], d[::-2], e[::-2]), r[::-2])
+                np.testing.assert_equal(cfunc(c[::-3], d[::-3], e[::-3]), r[::-3])
+                np.testing.assert_equal(cfunc(c[1::-3], d[1::-3], e[1::-3]), r[1::-3])
 
     def test_np_where_numpy_ndim(self):
         # https://github.com/numpy/numpy/blob/fe2bb380fd9a084b622ff3f00cb6f245e8c1a10e/numpy/core/tests/test_multiarray.py#L8737-L8749
@@ -1484,44 +1488,48 @@ class TestArrayMethods(MemoryLeakMixin, TestCase):
 
     def test_sum_axis_dtype_kws(self):
         """ test sum with axis and dtype parameters over a whole range of dtypes """
-        pyfunc = array_sum_axis_dtype_kws
-        cfunc = jit(nopython=True)(pyfunc)
-        all_dtypes = [np.float64, np.float32, np.int64, np.int32,
-                      np.complex64, np.complex128]
-        all_test_arrays = [
-            [np.ones((7, 6, 5, 4, 3), arr_dtype),
-             np.ones(1, arr_dtype),
-             np.ones((7, 3), arr_dtype) * -5]
-            for arr_dtype in all_dtypes]
+        # ~46 specializations are compiled here purely for numerical
+        # correctness checking (assertPreciseEqual); OPT=0 skips the costly
+        # O3 pass per specialization without affecting what's verified.
+        with override_config('OPT', 0):
+            pyfunc = array_sum_axis_dtype_kws
+            cfunc = jit(nopython=True)(pyfunc)
+            all_dtypes = [np.float64, np.float32, np.int64, np.int32,
+                          np.complex64, np.complex128]
+            all_test_arrays = [
+                [np.ones((7, 6, 5, 4, 3), arr_dtype),
+                 np.ones(1, arr_dtype),
+                 np.ones((7, 3), arr_dtype) * -5]
+                for arr_dtype in all_dtypes]
 
-        unsigned_dtypes = [np.uint32, np.uint64, np.bool_]
-        all_test_arrays = [
-            [np.ones((7, 6, 5, 4, 3), arr_dtype),
-             np.ones(1, arr_dtype)]
-            for arr_dtype in unsigned_dtypes]
+            unsigned_dtypes = [np.uint32, np.uint64, np.bool_]
+            all_test_arrays = [
+                [np.ones((7, 6, 5, 4, 3), arr_dtype),
+                 np.ones(1, arr_dtype)]
+                for arr_dtype in unsigned_dtypes]
 
-        out_dtypes = {np.dtype('float64'): [np.float64],
-                      np.dtype('float32'): [np.float64, np.float32],
-                      np.dtype('int64'): [np.float64, np.int64, np.float32],
-                      np.dtype('int32'): [np.float64, np.int64, np.float32, np.int32],
-                      np.dtype('uint32'): [np.float64, np.int64, np.float32],
-                      np.dtype('uint64'): [np.float64, np.uint64],
-                      np.dtype('bool'): [np.float64, np.int64, np.float32, np.int32, np.bool_],
-                      np.dtype('complex64'): [np.complex64, np.complex128],
-                      np.dtype('complex128'): [np.complex128]}
+            out_dtypes = {np.dtype('float64'): [np.float64],
+                          np.dtype('float32'): [np.float64, np.float32],
+                          np.dtype('int64'): [np.float64, np.int64, np.float32],
+                          np.dtype('int32'): [np.float64, np.int64, np.float32, np.int32],
+                          np.dtype('uint32'): [np.float64, np.int64, np.float32],
+                          np.dtype('uint64'): [np.float64, np.uint64],
+                          np.dtype('bool'): [np.float64, np.int64, np.float32, np.int32, np.bool_],
+                          np.dtype('complex64'): [np.complex64, np.complex128],
+                          np.dtype('complex128'): [np.complex128]}
 
-        for arr_list in all_test_arrays:
-            for arr in arr_list:
-                for out_dtype in out_dtypes[arr.dtype]:
-                    for axis in (0, 1, 2):
-                        if axis > len(arr.shape) - 1:
-                            continue
-                        subtest_str = ("Testing np.sum with {} input and {} output "
-                                       .format(arr.dtype, out_dtype))
-                        with self.subTest(subtest_str):
-                            py_res = pyfunc(arr, axis=axis, dtype=out_dtype)
-                            nb_res = cfunc(arr, axis=axis, dtype=out_dtype)
-                            self.assertPreciseEqual(py_res, nb_res)
+            for arr_list in all_test_arrays:
+                for arr in arr_list:
+                    for out_dtype in out_dtypes[arr.dtype]:
+                        for axis in (0, 1, 2):
+                            if axis > len(arr.shape) - 1:
+                                continue
+                            subtest_str = ("Testing np.sum with {} input and {} output "
+                                           .format(arr.dtype, out_dtype))
+                            with self.subTest(subtest_str):
+                                py_res = pyfunc(arr, axis=axis, dtype=out_dtype)
+                                nb_res = cfunc(arr, axis=axis, dtype=out_dtype)
+                                self.assertPreciseEqual(py_res, nb_res)
 
     def test_sum_axis_dtype_pos_arg(self):
         """ testing that axis and dtype inputs work when passed as positional """
@@ -1770,33 +1778,40 @@ class TestArrayMethods(MemoryLeakMixin, TestCase):
                     cfunc(a, None, None)
 
     def test_clip_array_min_max(self):
-        has_out = (np_clip, np_clip_kwargs, array_clip, array_clip_kwargs)
-        has_no_out = (np_clip_no_out, array_clip_no_out)
-        # TODO: scalars are not tested (issue #3469)
-        a = np.linspace(-10, 10, 40).reshape(5, 2, 4)
-        a_min_arr = np.arange(-8, 0).astype(a.dtype).reshape(2, 4)
-        a_max_arr = np.arange(0, 8).astype(a.dtype).reshape(2, 4)
-        mins = [0, -5, a_min_arr, None]
-        maxs = [0, 5, a_max_arr, None]
-        for pyfunc in has_out + has_no_out:
-            cfunc = jit(nopython=True)(pyfunc)
+        # This test compiles ~170 type-signature specializations purely to
+        # check numerical correctness (assert_equal), so the LLVM
+        # optimization level doesn't affect what's being verified. Compiling
+        # at OPT=0 instead of the default OPT=3 skips the costly O3 pass
+        # (loop rotation/vectorization/GVN) for each specialization, cutting
+        # this test's compile time substantially with no change in coverage.
+        with override_config('OPT', 0):
+            has_out = (np_clip, np_clip_kwargs, array_clip, array_clip_kwargs)
+            has_no_out = (np_clip_no_out, array_clip_no_out)
+            # TODO: scalars are not tested (issue #3469)
+            a = np.linspace(-10, 10, 40).reshape(5, 2, 4)
+            a_min_arr = np.arange(-8, 0).astype(a.dtype).reshape(2, 4)
+            a_max_arr = np.arange(0, 8).astype(a.dtype).reshape(2, 4)
+            mins = [0, -5, a_min_arr, None]
+            maxs = [0, 5, a_max_arr, None]
+            for pyfunc in has_out + has_no_out:
+                cfunc = jit(nopython=True)(pyfunc)
 
-            for a_min in mins:
-                for a_max in maxs:
+                for a_min in mins:
+                    for a_max in maxs:
 
-                    if a_min is None and a_max is None:
-                        continue
+                        if a_min is None and a_max is None:
+                            continue
 
-                    np.testing.assert_equal(pyfunc(a, a_min, a_max), cfunc(a, a_min, a_max))
+                        np.testing.assert_equal(pyfunc(a, a_min, a_max), cfunc(a, a_min, a_max))
 
-                    if pyfunc in has_out:
-                        pyout = np.empty_like(a)
-                        cout = np.empty_like(a)
-                        np.testing.assert_equal(pyfunc(a, a_min, a_max, pyout),
-                                                cfunc(a, a_min, a_max, cout))
-                        np.testing.assert_equal(pyout, cout)
+                        if pyfunc in has_out:
+                            pyout = np.empty_like(a)
+                            cout = np.empty_like(a)
+                            np.testing.assert_equal(pyfunc(a, a_min, a_max, pyout),
+                                                    cfunc(a, a_min, a_max, cout))
+                            np.testing.assert_equal(pyout, cout)
 
-                    self._lower_clip_result_test_util(cfunc, a, a_min, a_max)
+                        self._lower_clip_result_test_util(cfunc, a, a_min, a_max)
 
     def test_clip_min_max_errors(self):
         # Disable leak check since we expect an error to be raised
