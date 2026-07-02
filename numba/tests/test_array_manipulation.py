@@ -7,7 +7,7 @@ import unittest
 from numba import jit, njit, from_dtype, typeof
 from numba.core.errors import TypingError
 from numba.core import types, errors
-from numba.tests.support import TestCase, MemoryLeakMixin
+from numba.tests.support import TestCase, MemoryLeakMixin, skip_if_reduced_testing
 
 enable_pyobj_flags = {'forceobj': True}
 
@@ -848,6 +848,7 @@ class TestArrayManipulation(MemoryLeakMixin, TestCase):
         self.assertIn('Unsupported array index type float64',
                       str(raises.exception))
 
+    @skip_if_reduced_testing
     def test_fill_diagonal_basic(self):
         pyfunc = numpy_fill_diagonal
         cfunc = jit(nopython=True)(pyfunc)

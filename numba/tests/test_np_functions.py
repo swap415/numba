@@ -6950,6 +6950,7 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
             yield a, b
             yield b, a
 
+    @skip_if_reduced_testing
     def test_isin_2(self):
         np_pyfunc = np_isin_2
         np_nbfunc = njit(np_pyfunc)

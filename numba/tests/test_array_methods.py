@@ -12,7 +12,8 @@ from numba.core.errors import TypingError, NumbaValueError
 from numba.np.numpy_support import as_dtype, numpy_version
 from numba.tests.support import (TestCase, MemoryLeakMixin,
                                  needs_blas, skip_if_numpy_2,
-                                 expected_failure_np2)
+                                 expected_failure_np2,
+                                 skip_if_reduced_testing)
 
 TIMEDELTA_M = 'timedelta64[M]'
 TIMEDELTA_Y = 'timedelta64[Y]'
@@ -1769,6 +1770,7 @@ class TestArrayMethods(MemoryLeakMixin, TestCase):
                 with self.assertRaisesRegex(ValueError, msg):
                     cfunc(a, None, None)
 
+    @skip_if_reduced_testing
     def test_clip_array_min_max(self):
         has_out = (np_clip, np_clip_kwargs, array_clip, array_clip_kwargs)
         has_no_out = (np_clip_no_out, array_clip_no_out)

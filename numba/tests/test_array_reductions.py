@@ -4,7 +4,8 @@ import numpy as np
 
 from numba import jit, njit, typeof, types
 from numba.np.numpy_support import numpy_version
-from numba.tests.support import TestCase, MemoryLeakMixin, tag, skip_if_numpy_2
+from numba.tests.support import (TestCase, MemoryLeakMixin, tag,
+                                 skip_if_numpy_2, skip_if_reduced_testing)
 import unittest
 
 
@@ -753,24 +754,28 @@ class TestArrayReductions(MemoryLeakMixin, TestCase):
 
         self.assertIn('Not supported for complex dtype', str(e.exception))
 
+    @skip_if_reduced_testing
     def test_percentile_basic(self):
         pyfunc = array_percentile_global
         self.check_percentile_and_quantile(pyfunc, q_upper_bound=100)
         self.check_percentile_edge_cases(pyfunc, q_upper_bound=100)
         self.check_percentile_exceptions(pyfunc)
 
+    @skip_if_reduced_testing
     def test_nanpercentile_basic(self):
         pyfunc = array_nanpercentile_global
         self.check_percentile_and_quantile(pyfunc, q_upper_bound=100)
         self.check_percentile_edge_cases(pyfunc, q_upper_bound=100)
         self.check_percentile_exceptions(pyfunc)
 
+    @skip_if_reduced_testing
     def test_quantile_basic(self):
         pyfunc = array_quantile_global
         self.check_percentile_and_quantile(pyfunc, q_upper_bound=1)
         self.check_percentile_edge_cases(pyfunc, q_upper_bound=1)
         self.check_quantile_exceptions(pyfunc)
 
+    @skip_if_reduced_testing
     def test_nanquantile_basic(self):
         pyfunc = array_nanquantile_global
         self.check_percentile_and_quantile(pyfunc, q_upper_bound=1)

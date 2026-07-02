@@ -11,7 +11,8 @@ import numpy as np
 from numba import jit, njit, typeof
 from numba.core import errors
 from numba.tests.support import (TestCase, tag, needs_lapack, needs_blas,
-                                 _is_armv7l, EnableNRTStatsMixin)
+                                 _is_armv7l, EnableNRTStatsMixin,
+                                 skip_if_reduced_testing)
 from .matmul_usecase import matmul_usecase
 import unittest
 
@@ -2589,6 +2590,7 @@ class TestBasics(TestLinalgSystems):  # TestLinalgSystems for 1d test
             a = a + 1j
         return (a, b)
 
+    @skip_if_reduced_testing
     def test_outer(self):
         cfunc = jit(nopython=True)(outer_matrix)
 
