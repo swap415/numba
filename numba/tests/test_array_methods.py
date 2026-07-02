@@ -1486,13 +1486,6 @@ class TestArrayMethods(MemoryLeakMixin, TestCase):
         """ test sum with axis and dtype parameters over a whole range of dtypes """
         pyfunc = array_sum_axis_dtype_kws
         cfunc = jit(nopython=True)(pyfunc)
-        all_dtypes = [np.float64, np.float32, np.int64, np.int32,
-                      np.complex64, np.complex128]
-        all_test_arrays = [
-            [np.ones((7, 6, 5, 4, 3), arr_dtype),
-             np.ones(1, arr_dtype),
-             np.ones((7, 3), arr_dtype) * -5]
-            for arr_dtype in all_dtypes]
 
         unsigned_dtypes = [np.uint32, np.uint64, np.bool_]
         all_test_arrays = [

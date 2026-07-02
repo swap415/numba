@@ -929,8 +929,13 @@ class MemoryLeak(object):
     __enable_leak_check = True
 
     def memory_leak_setup(self):
-        # Clean up any NRT-backed objects hanging in a dead reference cycle
-        gc.collect()
+        if not self.__enable_leak_check:
+            return
+        # Clean up any NRT-backed objects hanging in a dead reference cycle.
+        # A young-generation collection is enough to reclaim cycles created
+        # by the previous test and is far cheaper than a full gc.collect()
+        # once the process has accumulated many long-lived JIT artifacts.
+        gc.collect(0)
         self.__init_stats = rtsys.get_allocation_stats()
 
     def memory_leak_teardown(self):
@@ -951,6 +956,9 @@ class MemoryLeak(object):
         # For per-test use when MemoryLeakMixin is injected into a TestCase
         self.__enable_leak_check = False
 
+    def leak_check_enabled(self):
+        return self.__enable_leak_check
+
 
 class MemoryLeakMixin(EnableNRTStatsMixin, MemoryLeak):
 
@@ -959,7 +967,8 @@ class MemoryLeakMixin(EnableNRTStatsMixin, MemoryLeak):
         self.memory_leak_setup()
 
     def tearDown(self):
-        gc.collect()
+        if self.leak_check_enabled():
+            gc.collect(0)
         self.memory_leak_teardown()
         super(MemoryLeakMixin, self).tearDown()
 
