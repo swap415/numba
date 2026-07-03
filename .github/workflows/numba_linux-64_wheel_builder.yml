@@ -153,6 +153,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       USE_TBB: ${{ github.event_name == 'workflow_dispatch' && inputs.use_tbb != false || true }}
+      # Trade peak-optimized codegen for much faster JIT compilation in CI.
+      # LLVM's -O3-equivalent module pass is the dominant cost in slow-compiling
+      # tests (see ci_debug perf analysis); -O1 preserves correctness and, for
+      # hot-loop runtime speed, is within noise of the default (-O3).
+      NUMBA_OPT: "1"
     defaults:
       run:
         shell: bash -elx {0}
