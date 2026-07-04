@@ -109,7 +109,12 @@ class UfuncAtIterator:
         else:
             sig = (self.a_ty.dtype, self.b_ty.dtype)
 
-        cres = ufunc.add(sig)
+        # `ol_at` already compiled (and registered) this signature at typing
+        # time, so look it up instead of calling `add()` again, which would
+        # just hit its "already compiled" warning path on every `.at()` call.
+        _, cres = ufunc.find_ewise_function(sig)
+        if cres is None:
+            cres = ufunc.add(sig)
         context.add_linking_libs((cres.library,))
         return cres
 
