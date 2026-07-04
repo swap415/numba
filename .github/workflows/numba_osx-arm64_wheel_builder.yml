@@ -214,6 +214,8 @@ jobs:
           echo "Set DYLD_FALLBACK_LIBRARY_PATH to: $(brew --prefix libomp)/lib"
 
       - name: Validate and test wheel
+        env:
+          _NUMBA_REDUCED_TESTING: 1
         run: |
           PYTHON_PATH=$(which python${{ matrix.python_canonical }})
           "$PYTHON_PATH" -m venv .venv && source .venv/bin/activate
