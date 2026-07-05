@@ -22,6 +22,14 @@ def np_take(A, indices):
 def np_take_kws(A, indices, axis):
     return np.take(A, indices, axis=axis)
 
+@njit
+def _multidim_get_item(array, idx):
+    return array[idx]
+
+@njit
+def _multidim_set_item(array, idx, item):
+    array[idx] = item
+
 class TestFancyIndexing(MemoryLeakMixin, TestCase):
 
     def generate_advanced_indices(self, N, many=True):
@@ -454,16 +462,12 @@ class TestFancyIndexingMultiDim(MemoryLeakMixin, TestCase):
         return indices
 
     def check_getitem_indices(self, arr_shape, index):
-        @njit
-        def numba_get_item(array, idx):
-            return array[idx]
-
         arr = np.random.randint(0, 11, size=arr_shape)
-        get_item = numba_get_item.py_func
+        get_item = _multidim_get_item.py_func
         orig_base = arr.base or arr
 
         expected = get_item(arr, index)
-        got = numba_get_item(arr, index)
+        got = _multidim_get_item(arr, index)
         # Sanity check: In advanced indexing, the result is always a copy.
         self.assertIsNot(expected.base, orig_base)
 
@@ -477,17 +481,13 @@ class TestFancyIndexingMultiDim(MemoryLeakMixin, TestCase):
         self.assertFalse(np.may_share_memory(got, expected))
 
     def check_setitem_indices(self, arr_shape, index):
-        @njit
-        def set_item(array, idx, item):
-            array[idx] = item
-
         arr = np.random.randint(0, 11, size=arr_shape)
         src = arr[index]
         expected = np.zeros_like(arr)
         got = np.zeros_like(arr)
 
-        set_item.py_func(expected, index, src)
-        set_item(got, index, src)
+        _multidim_set_item.py_func(expected, index, src)
+        _multidim_set_item(got, index, src)
 
         # Note: Numba may not return the same array strides and
         # contiguity as NumPy

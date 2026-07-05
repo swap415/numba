@@ -515,13 +515,12 @@ class JITTimsortMixin(object):
     test_merge_at = None
     test_merge_force_collapse = None
 
-    def wrap_with_mergestate(self, timsort, func, _cache=None):
+    def wrap_with_mergestate(self, timsort, func):
         """
         Wrap *func* into another compiled function inserting a runtime-created
         mergestate as the first function argument.
         """
-        if _cache is None:
-            _cache = {}
+        _cache = self.__dict__.setdefault('_mergestate_cache', {})
         key = timsort, func
         if key in _cache:
             return _cache[key]

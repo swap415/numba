@@ -1722,12 +1722,18 @@ class TestArrayMethods(MemoryLeakMixin, TestCase):
     def _lower_clip_result_test_util(self, func, a, a_min, a_max):
         # verifies that type-inference is working on the return value
         # this used to trigger issue #3489
-        def lower_clip_result(a):
+        def lower_clip_result(a, a_min, a_max):
             return np.expm1(func(a, a_min, a_max))
 
+        cache = self.__dict__.setdefault('_lower_clip_result_cache', {})
+        cfunc = cache.get(func)
+        if cfunc is None:
+            cfunc = jit(nopython=True)(lower_clip_result)
+            cache[func] = cfunc
+
         np.testing.assert_almost_equal(
-            lower_clip_result(a),
-            jit(nopython=True)(lower_clip_result)(a))
+            lower_clip_result(a, a_min, a_max),
+            cfunc(a, a_min, a_max))
 
     def test_clip(self):
         has_out = (np_clip, np_clip_kwargs, array_clip, array_clip_kwargs)
