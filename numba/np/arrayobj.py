@@ -5069,6 +5069,7 @@ def numpy_diagflat(v, k=0):
     return impl
 
 
+@functools.lru_cache(maxsize=None)
 def generate_getitem_setitem_with_axis(ndim, kind):
     assert kind in ('getitem', 'setitem')
 
