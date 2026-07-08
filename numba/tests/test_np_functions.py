@@ -6980,6 +6980,19 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
         yield a, b
 
     @staticmethod
+    def _isin_arrays_kw_subset():
+        # test_isin_2 already exercises the full type/shape/dtype matrix
+        # in _isin_arrays_full() against the shared _in1d_impl. The
+        # assume_unique/invert tests below only need to confirm that extra
+        # kwarg plumbing, so reuse a small representative subset here
+        # instead of recompiling ~40-46 signatures per test.
+        yield [1, 2, 2], [2, 2]  # list, has duplicates
+        yield [1, 2], [2, 1]  # list, unique
+        yield np.array([1.0, 2.0, 2.0]), np.array([2.0, 3.0])  # float64
+        yield np.arange(4).reshape([2, 2]), np.array([2, 3])  # 2d array
+        yield np.array([True, False]), np.array([False, False, False])
+
+    @staticmethod
     def _isin_arrays_full():
         yield (List.empty_list(types.float64),
                List.empty_list(types.float64))  # two empty arrays
@@ -7095,7 +7108,7 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
             got = np_nbfunc(ar1, ar2, assume_unique)
             self.assertPreciseEqual(expected, got, msg=f"ar1={ar1}, ar2={ar2}")
 
-        for a, b in self._isin_arrays():
+        for a, b in self._isin_arrays_kw_subset():
             check(a, b)
 
             try:
@@ -7123,7 +7136,7 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
             got = np_nbfunc(ar1, ar2, invert)
             self.assertPreciseEqual(expected, got, msg=f"ar1={ar1}, ar2={ar2}")
 
-        for a, b in self._isin_arrays():
+        for a, b in self._isin_arrays_kw_subset():
             check(a, b, invert=False)
             check(a, b, invert=True)
 
@@ -7141,7 +7154,7 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
             got = np_nbfunc(ar1, ar2, assume_unique, invert)
             self.assertPreciseEqual(expected, got, msg=f"ar1={ar1}, ar2={ar2}")
 
-        for a, b in self._isin_arrays():
+        for a, b in self._isin_arrays_kw_subset():
             check(a, b, invert=False)
             check(a, b, invert=True)
 
