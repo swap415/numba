@@ -1324,19 +1324,16 @@ class TestArrayReductions(MemoryLeakMixin, TestCase):
         arr4d[0, 1, 1, 2] += 100
         arr4d[1, 0, 0, 0] -= 51
 
+        def pyfunc(a, axis):
+            return np.argmax(a, axis=axis)
+        cfunc = jit(nopython=True)(pyfunc)
+
         for arr in [arr1d, arr2d, arr4d]:
             axes = list(range(arr.ndim)) + [
                 -(i+1) for i in range(arr.ndim)
             ]
-            py_functions = [
-                lambda a, _axis=axis: np.argmax(a, axis=_axis)
-                for axis in axes
-            ]
-            c_functions = [
-                jit(nopython=True)(pyfunc) for pyfunc in py_functions
-            ]
-            for cfunc in c_functions:
-                self.assertPreciseEqual(cfunc.py_func(arr), cfunc(arr))
+            for axis in axes:
+                self.assertPreciseEqual(pyfunc(arr, axis), cfunc(arr, axis))
 
     def test_argmax_axis_out_of_range(self):
         arr1d = np.arange(6)
@@ -1398,19 +1395,16 @@ class TestArrayReductions(MemoryLeakMixin, TestCase):
         arr4d[0, 1, 1, 2] += 100
         arr4d[1, 0, 0, 0] -= 51
 
+        def pyfunc(a, axis):
+            return np.argmin(a, axis=axis)
+        cfunc = jit(nopython=True)(pyfunc)
+
         for arr in [arr1d, arr2d, arr4d]:
             axes = list(range(arr.ndim)) + [
                 -(i+1) for i in range(arr.ndim)
             ]
-            py_functions = [
-                lambda a, _axis=axis: np.argmin(a, axis=_axis)
-                for axis in axes
-            ]
-            c_functions = [
-                jit(nopython=True)(pyfunc) for pyfunc in py_functions
-            ]
-            for cfunc in c_functions:
-                self.assertPreciseEqual(cfunc.py_func(arr), cfunc(arr))
+            for axis in axes:
+                self.assertPreciseEqual(pyfunc(arr, axis), cfunc(arr, axis))
 
     def test_argmin_axis_out_of_range(self):
         arr1d = np.arange(6)

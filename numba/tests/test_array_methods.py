@@ -257,6 +257,12 @@ def array_clip_kwargs(a, a_min=None, a_max=None, out=None):
 def array_clip_no_out(a, a_min, a_max):
     return a.clip(a_min, a_max)
 
+@jit(nopython=True)
+def _lower_clip_result_impl(func, a, a_min, a_max):
+    # verifies that type-inference is working on the return value
+    # this used to trigger issue #3489
+    return np.expm1(func(a, a_min, a_max))
+
 def array_conj(a):
     return a.conj()
 
@@ -1688,14 +1694,9 @@ class TestArrayMethods(MemoryLeakMixin, TestCase):
         np.testing.assert_equal(pyfunc(z), cfunc(z))
 
     def _lower_clip_result_test_util(self, func, a, a_min, a_max):
-        # verifies that type-inference is working on the return value
-        # this used to trigger issue #3489
-        def lower_clip_result(a):
-            return np.expm1(func(a, a_min, a_max))
-
         np.testing.assert_almost_equal(
-            lower_clip_result(a),
-            jit(nopython=True)(lower_clip_result)(a))
+            np.expm1(func(a, a_min, a_max)),
+            _lower_clip_result_impl(func, a, a_min, a_max))
 
     def test_clip(self):
         has_out = (np_clip, np_clip_kwargs, array_clip, array_clip_kwargs)
