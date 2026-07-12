@@ -46,138 +46,138 @@ class _Sequence(pt.Protocol[T_co]):
 DEFAULT_ALLOCATED = listobject.DEFAULT_ALLOCATED
 
 
-@njit
+@njit(cache=True)
 def _make_list(itemty, allocated=DEFAULT_ALLOCATED):
     return listobject._as_meminfo(listobject.new_list(itemty,
                                                       allocated=allocated))
 
 
-@njit
+@njit(cache=True)
 def _length(l):
     return len(l)
 
 
-@njit
+@njit(cache=True)
 def _allocated(l):
     return l._allocated()
 
 
-@njit
+@njit(cache=True)
 def _is_mutable(l):
     return l._is_mutable()
 
 
-@njit
+@njit(cache=True)
 def _make_mutable(l):
     return l._make_mutable()
 
 
-@njit
+@njit(cache=True)
 def _make_immutable(l):
     return l._make_immutable()
 
 
-@njit
+@njit(cache=True)
 def _append(l, item):
     l.append(item)
 
 
-@njit
+@njit(cache=True)
 def _setitem(l, i, item):
     l[i] = item
 
 
-@njit
+@njit(cache=True)
 def _getitem(l, i):
     return l[i]
 
 
-@njit
+@njit(cache=True)
 def _contains(l, item):
     return item in l
 
 
-@njit
+@njit(cache=True)
 def _count(l, item):
     return l.count(item)
 
 
-@njit
+@njit(cache=True)
 def _pop(l, i):
     return l.pop(i)
 
 
-@njit
+@njit(cache=True)
 def _delitem(l, i):
     del l[i]
 
 
-@njit
+@njit(cache=True)
 def _extend(l, iterable):
     return l.extend(iterable)
 
 
-@njit
+@njit(cache=True)
 def _insert(l, i, item):
     l.insert(i, item)
 
 
-@njit
+@njit(cache=True)
 def _remove(l, item):
     l.remove(item)
 
 
-@njit
+@njit(cache=True)
 def _clear(l):
     l.clear()
 
 
-@njit
+@njit(cache=True)
 def _reverse(l):
     l.reverse()
 
 
-@njit
+@njit(cache=True)
 def _copy(l):
     return l.copy()
 
 
-@njit
+@njit(cache=True)
 def _eq(t, o):
     return t == o
 
 
-@njit
+@njit(cache=True)
 def _ne(t, o):
     return t != o
 
 
-@njit
+@njit(cache=True)
 def _lt(t, o):
     return t < o
 
 
-@njit
+@njit(cache=True)
 def _le(t, o):
     return t <= o
 
 
-@njit
+@njit(cache=True)
 def _gt(t, o):
     return t > o
 
 
-@njit
+@njit(cache=True)
 def _ge(t, o):
     return t >= o
 
 
-@njit
+@njit(cache=True)
 def _index(l, item, start, end):
     return l.index(item, start, end)
 
 
-@njit
+@njit(cache=True)
 def _sort(l, key, reverse):
     return l.sort(key, reverse)
 

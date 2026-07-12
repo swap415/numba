@@ -18,58 +18,58 @@ from numba.typed import dictobject
 from numba.core.typing import signature
 
 
-@njit
+@njit(cache=True)
 def _make_dict(keyty, valty, n_keys=0):
     return dictobject._as_meminfo(dictobject.new_dict(keyty, valty,
                                                       n_keys=n_keys))
 
 
-@njit
+@njit(cache=True)
 def _length(d):
     return len(d)
 
 
-@njit
+@njit(cache=True)
 def _setitem(d, key, value):
     d[key] = value
 
 
-@njit
+@njit(cache=True)
 def _getitem(d, key):
     return d[key]
 
 
-@njit
+@njit(cache=True)
 def _delitem(d, key):
     del d[key]
 
 
-@njit
+@njit(cache=True)
 def _contains(d, key):
     return key in d
 
 
-@njit
+@njit(cache=True)
 def _get(d, key, default):
     return d.get(key, default)
 
 
-@njit
+@njit(cache=True)
 def _setdefault(d, key, default):
     return d.setdefault(key, default)
 
 
-@njit
+@njit(cache=True)
 def _iter(d):
     return list(d.keys())
 
 
-@njit
+@njit(cache=True)
 def _popitem(d):
     return d.popitem()
 
 
-@njit
+@njit(cache=True)
 def _copy(d):
     return d.copy()
 

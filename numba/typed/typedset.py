@@ -18,37 +18,37 @@ from numba.typed import setobject
 from numba.core.typing import signature
 
 
-@njit
+@njit(cache=True)
 def _make_set(keyty):
     return setobject._as_meminfo(setobject.new_set(keyty))
 
 
-@njit
+@njit(cache=True)
 def _length(s):
     return len(s)
 
 
-@njit
+@njit(cache=True)
 def _copy(s):
     return s.copy()
 
 
-@njit
+@njit(cache=True)
 def _additem(s, key):
     s.add(key)
 
 
-@njit
+@njit(cache=True)
 def _set_contains(s, key):
     return (key in s)
 
 
-@njit
+@njit(cache=True)
 def _discarditem(s, key):
     return s.discard(key)
 
 
-@njit
+@njit(cache=True)
 def _iter(s):
     return list(s)
 
