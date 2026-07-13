@@ -246,6 +246,26 @@ def gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero):
     return inner
 
 
+_sum_axis_compiled_cache = {}
+
+
+def _get_compiled_sum_axis_impl(is_axis_const, const_axis_val, op, zero):
+    # `context.compile_internal`'s cache key (Context.compile_subroutine)
+    # includes the closure-cell contents of the wrapper function, one of
+    # which is `compiled` below. Calling `gen_sum_axis_impl` +
+    # `register_jitable` again on every call produces a new function
+    # object each time even when the generated code would be identical,
+    # which defeats that cache and forces a full recompile. Memoizing here
+    # lets logically-identical calls reuse the same compiled subroutine.
+    key = (is_axis_const, const_axis_val, op, type(zero), zero)
+    compiled = _sum_axis_compiled_cache.get(key)
+    if compiled is None:
+        gen_impl = gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero)
+        compiled = register_jitable(gen_impl)
+        _sum_axis_compiled_cache[key] = compiled
+    return compiled
+
+
 @lower_builtin(np.sum, types.Array, types.intp, types.DTypeSpec)
 @lower_builtin(np.sum, types.Array, types.IntegerLiteral, types.DTypeSpec)
 @lower_builtin("array.sum", types.Array, types.intp, types.DTypeSpec)
@@ -279,8 +299,8 @@ def array_sum_axis_dtype(context, builder, sig, args):
         sig = sig.replace(args=[ty_array, ty_axis, ty_dtype])
         is_axis_const = True
 
-    gen_impl = gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero)
-    compiled = register_jitable(gen_impl)
+    compiled = _get_compiled_sum_axis_impl(is_axis_const, const_axis_val, op,
+                                           zero)
 
     def array_sum_impl_axis(arr, axis, dtype):
         return compiled(arr, axis)
@@ -339,8 +359,8 @@ def array_sum_axis(context, builder, sig, args):
         sig = sig.replace(args=[ty_array, ty_axis])
         is_axis_const = True
 
-    gen_impl = gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero)
-    compiled = register_jitable(gen_impl)
+    compiled = _get_compiled_sum_axis_impl(is_axis_const, const_axis_val, op,
+                                           zero)
 
     def array_sum_impl_axis(arr, axis):
         return compiled(arr, axis)
