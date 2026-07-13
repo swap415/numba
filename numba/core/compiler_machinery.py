@@ -300,8 +300,8 @@ class PassManager(object):
             qualname=qualname,
             module=internal_state.func_id.modname,
             flags=utils._lazy_pformat(internal_state.flags.values()),
-            args=str(internal_state.args),
-            return_type=str(internal_state.return_type),
+            args=utils._lazy_pformat(internal_state.args),
+            return_type=utils._lazy_pformat(internal_state.return_type),
         )
         errctx = errors.new_error_context("Pass {name}", name=pss.name())
         with ev.trigger_event("numba:run_pass", data=ev_details), errctx:
