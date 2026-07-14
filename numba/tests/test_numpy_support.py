@@ -14,6 +14,7 @@ from numba.core.errors import NumbaNotImplementedError
 from numba.tests.support import TestCase
 from numba.tests.enum_usecases import Shake, RequestError
 from numba.np import numpy_support
+from numba.np.numpy_support import numpy_version
 from numba.np import types as npy_types
 
 
@@ -83,7 +84,10 @@ class TestFromDtype(TestCase):
             self.assertEqual(dtype, numpy_support.as_dtype(numba_type))
 
         check('S10', types.CharSeq(10))
-        check('a11', types.CharSeq(11))
+        if numpy_version < (2, 5):
+            # NumPy 2.5 removed the 'a' dtype string alias for bytes strings
+            # (a deprecated alias of 'S').
+            check('a11', types.CharSeq(11))
         check('U12', types.UnicodeCharSeq(12))
 
     def check_datetime_types(self, letter, nb_class):

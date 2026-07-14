@@ -769,3 +769,44 @@ def lt_complex(a, b):
                     elif a.real == b.real:
                         return a.imag < b.imag
                     return False
+
+
+def gt_floats(a, b):
+    # Descending counterpart of lt_floats: orders larger values first while
+    # still placing NaNs at the end (used by descending sort, NumPy >= 2.5).
+    return a > b or (np.isnan(b) and not np.isnan(a))
+
+
+def gt_complex(a, b):
+    # Descending counterpart of lt_complex: the NaN handling is identical (so
+    # NaNs still sort to the end), only the value comparisons are reversed.
+    if np.isnan(a.real):
+        if np.isnan(b.real):
+            if np.isnan(a.imag):
+                return False
+            else:
+                if np.isnan(b.imag):
+                    return True
+                else:
+                    return a.imag > b.imag
+        else:
+            return False
+
+    else:
+        if np.isnan(b.real):
+            return True
+        else:
+            if np.isnan(a.imag):
+                if np.isnan(b.imag):
+                    return a.real > b.real
+                else:
+                    return False
+            else:
+                if np.isnan(b.imag):
+                    return True
+                else:
+                    if a.real > b.real:
+                        return True
+                    elif a.real == b.real:
+                        return a.imag > b.imag
+                    return False

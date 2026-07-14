@@ -1649,8 +1649,11 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
             a = self.rnd.choice(element_pool, sample_size)
             v = self.rnd.choice(element_pool, sample_size + (i % 3 - 1))
 
-            # output should match numpy regardless of whether `a` is sorted
-            check(a, v)
+            # NumPy 2.5 changed the (documented as undefined) result of
+            # searchsorted on unsorted input, so only cross-check unsorted `a`
+            # against NumPy on older versions. Sorted input must always match.
+            if numpy_version < (2, 5):
+                check(a, v)
             check(np.sort(a), v)
 
         ones = np.ones(5)
@@ -1728,12 +1731,18 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
             a = self.rnd.choice(element_pool, sample_size)
             v = self.rnd.choice(element_pool, sample_size + (i % 3 - 1))
 
-            # output should match numpy regardless of whether `a` is sorted
-            check(a, v)
+            # NumPy 2.5 changed the (documented as undefined) result of
+            # searchsorted on unsorted input, so only cross-check unsorted `a`
+            # against NumPy on older versions. Sorted input must always match.
+            if numpy_version < (2, 5):
+                check(a, v)
             check(np.sort(a), v)
 
         # check type promotion (a complex; v not so much)
-        check(a=np.array(element_pool), v=np.arange(2))
+        if numpy_version < (2, 5):
+            # `element_pool` is unsorted and contains NaNs; see note above.
+            check(a=np.array(element_pool), v=np.arange(2))
+        check(a=np.sort(np.array(element_pool)), v=np.arange(2))
 
     def test_digitize(self):
         pyfunc = digitize
@@ -5785,11 +5794,6 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
                 np.array([[1, 2, 3], [4, 5, 6]]),
                 np.array([[4, 5, 6], [1, 2, 3]])
             ),
-            # 2x3 array-like (n-dims)
-            (
-                np.array([[1, 2, 3], [4, 5, 6]]),
-                ((4, 5), (1, 2))
-            ),
             # 3x3 (1-dim) with type promotion
             (
                 np.array([1, 2, 3], dtype=np.int64),
@@ -5799,11 +5803,6 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
             (
                 (1, 2, 3),
                 (4, 5, 6)
-            ),
-            # 2x3 (1-dim)
-            (
-                np.array([1, 2]),
-                np.array([4, 5, 6])
             ),
             # 3x3 (with broadcasting 1d x 2d)
             (
@@ -5815,12 +5814,29 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
                 np.array([[1, 2, 3], [4, 5, 6]]),
                 np.array([1, 2, 3])
             ),
-            # 3x2 (with higher order broadcasting)
-            (
-                np.arange(36).reshape(6, 2, 3),
-                np.arange(4).reshape(2, 2)
-            )
         ]
+        if numpy_version < (2, 5):
+            # NumPy 2.5 removed support for 2-element (2D) input vectors in
+            # np.cross, and numba matches that (these inputs now raise, see
+            # test_cross_exceptions). The value comparison below therefore only
+            # applies on NumPy < 2.5.
+            pairs += [
+                # 2x3 array-like (n-dims)
+                (
+                    np.array([[1, 2, 3], [4, 5, 6]]),
+                    ((4, 5), (1, 2))
+                ),
+                # 2x3 (1-dim)
+                (
+                    np.array([1, 2]),
+                    np.array([4, 5, 6])
+                ),
+                # 3x2 (with higher order broadcasting)
+                (
+                    np.arange(36).reshape(6, 2, 3),
+                    np.arange(4).reshape(2, 2)
+                ),
+            ]
 
         for x, y in pairs:
             expected = pyfunc(x, y)
@@ -5849,10 +5865,18 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
                 np.array((1, 2)),
                 np.array((3, 4))
             )
-        self.assertIn(
-            'Dimensions for both inputs is 2.',
-            str(raises.exception)
-        )
+        if numpy_version < (2, 5):
+            self.assertIn(
+                'Dimensions for both inputs is 2.',
+                str(raises.exception)
+            )
+        else:
+            # NumPy 2.5 removed 2D vectors from np.cross; numba now rejects
+            # them to match.
+            self.assertIn(
+                'dimension must be 3',
+                str(raises.exception)
+            )
 
         self.assertIn(
             '`cross2d(a, b)` from `numba.np.extensions`.',
@@ -5870,16 +5894,22 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
             str(raises.exception)
         )
 
-        # test 2d cross product error for ndim == 1
+        # test 2d cross product error for ndim > 1
         with self.assertRaises(ValueError) as raises:
             cfunc(
                 np.arange(8).reshape((4, 2)),
                 np.arange(8)[::-1].reshape((4, 2))
             )
-        self.assertIn(
-            'Dimensions for both inputs is 2',
-            str(raises.exception)
-        )
+        if numpy_version < (2, 5):
+            self.assertIn(
+                'Dimensions for both inputs is 2',
+                str(raises.exception)
+            )
+        else:
+            self.assertIn(
+                'dimension must be 3',
+                str(raises.exception)
+            )
 
         # test non-array-like input
         with self.assertRaises(TypingError) as raises:
@@ -5893,7 +5923,15 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
         )
 
     def test_cross2d(self):
-        pyfunc = np_cross
+        # NumPy 2.5 removed support for 2-element (2D) input vectors in
+        # np.cross, so the reference 2D cross product is computed directly
+        # instead of via np.cross to keep this test working across versions.
+        def pyfunc(a, b):
+            a = np.asarray(a)
+            b = np.asarray(b)
+            # np.asarray keeps the result an ndarray (0-d for 1-D inputs),
+            # matching the return type of numba's cross2d / the old np.cross.
+            return np.asarray(a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0])
         cfunc = njit(nb_cross2d)
         pairs = [
             # 2x2 (n-dims)

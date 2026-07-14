@@ -9,6 +9,7 @@ import numpy as np
 
 from numba import jit, njit
 from numba.core import utils, errors
+from numba.np.numpy_support import numpy_version
 from numba.tests.support import TestCase, MemoryLeakMixin
 
 from numba.misc.quicksort import make_py_quicksort, make_jit_quicksort
@@ -65,6 +66,18 @@ def np_argsort_kind_usecase(val, is_stable=False):
         return np.argsort(val, kind='mergesort')
     else:
         return np.argsort(val, kind='quicksort')
+
+def sort_descending_usecase(val, descending):
+    val.sort(descending=descending)
+
+def argsort_descending_usecase(val, descending):
+    return val.argsort(descending=descending)
+
+def np_sort_descending_usecase(val, descending):
+    return np.sort(val, descending=descending)
+
+def np_argsort_descending_usecase(val, descending):
+    return np.argsort(val, descending=descending)
 
 def list_sort_usecase(n):
     np.random.seed(42)
@@ -1002,6 +1015,58 @@ class TestNumpySort(TestCase):
         msg = '.*Argument "a" must be array-like.*'
         with self.assertRaisesRegex(errors.TypingError, msg) as raises:
             cfunc(None)
+
+    @unittest.skipUnless(numpy_version >= (2, 5),
+                         "descending sort added in NumPy 2.5")
+    def test_sort_descending(self):
+        # np.sort / ndarray.sort with descending= (NumPy >= 2.5). NaNs stay at
+        # the end in both directions.
+        def check_copy(pyfunc, val, descending):
+            orig = copy.copy(val)
+            cfunc = jit(nopython=True)(pyfunc)
+            expected = pyfunc(val, descending)
+            got = cfunc(val, descending)
+            self.assertPreciseEqual(got, expected)
+            self.assertPreciseEqual(val, orig)  # not mutated
+
+        def check_inplace(val, descending):
+            cfunc = jit(nopython=True)(sort_descending_usecase)
+            expected = copy.copy(val)
+            got = copy.copy(val)
+            sort_descending_usecase(expected, descending)
+            cfunc(got, descending)
+            self.assertPreciseEqual(got, expected)
+
+        arrays = list(self.int_arrays()) + list(self.float_arrays())
+        real = next(self.float_arrays())
+        imag = real[::-1].copy()
+        arrays.append(np.array([complex(*x) for x in zip(real, imag)]))
+        for orig in arrays:
+            for descending in (False, True):
+                check_copy(np_sort_descending_usecase, orig, descending)
+                check_inplace(orig, descending)
+
+    @unittest.skipUnless(numpy_version >= (2, 5),
+                         "descending argsort added in NumPy 2.5")
+    def test_argsort_descending(self):
+        # np.argsort / ndarray.argsort with descending= (NumPy >= 2.5).
+        def check(pyfunc, val, descending):
+            orig = copy.copy(val)
+            cfunc = jit(nopython=True)(pyfunc)
+            got = cfunc(val, descending)
+            # the indices argsort the array (descending, NaNs last)
+            self.assertPreciseEqual(orig[got],
+                                    np.sort(orig, descending=descending))
+            # exact match with NumPy when there are no duplicates
+            if not self.has_duplicates(orig):
+                self.assertPreciseEqual(got, pyfunc(val, descending))
+            self.assertPreciseEqual(val, orig)  # not mutated
+
+        arrays = list(self.int_arrays()) + list(self.float_arrays())
+        for orig in arrays:
+            for descending in (False, True):
+                check(np_argsort_descending_usecase, orig, descending)
+                check(argsort_descending_usecase, orig, descending)
 
 
 class TestPythonSort(TestCase):

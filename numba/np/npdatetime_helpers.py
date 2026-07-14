@@ -26,7 +26,11 @@ DATETIME_UNITS = {
     '': 14,   # "generic", i.e. unit-less
 }
 
-NAT = np.timedelta64('nat').astype(np.int64)
+# The integer representation of NaT (INT64_MIN) is unit-independent, so a
+# specific unit is used here to avoid the "generic" timedelta64 unit, which is
+# deprecated in NumPy 2.5 (constructing np.timedelta64('nat') without a unit
+# raises a DeprecationWarning that would fire at import time).
+NAT = np.timedelta64('nat', 's').astype(np.int64)
 
 # NOTE: numpy has several inconsistent functions for timedelta casting:
 # - can_cast_timedelta64_{metadata,units}() disallows "safe" casting

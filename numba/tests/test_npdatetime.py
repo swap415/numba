@@ -336,7 +336,10 @@ class TestTimedeltaArithmetic(TestCase):
         check(TD('NaT', 'ps'), -1.5, TD('NaT', 'ps'))
         check(TD(7, 'ps'), float('nan'), TD('NaT', 'ps'))
         # wraparound on overflow
-        check(TD(2**62, 'ps'), 16, TD(0, 'ps'))
+        if numpy_version < (2, 5) or not self.jitargs.get('forceobj'):
+            # NumPy 2.5 raises OverflowError on timedelta64 overflow, which
+            # surfaces in object mode; numba's nopython path still wraps around.
+            check(TD(2**62, 'ps'), 16, TD(0, 'ps'))
 
     def test_div(self):
         div = self.jit(div_usecase)
@@ -837,7 +840,12 @@ class TestDatetimeArithmetic(TestCase):
             units = all_units[i:i+6]
             for unit in units:
                 # Force conversion
-                b = a.astype('M8[%s]' % unit)
+                try:
+                    b = a.astype('M8[%s]' % unit)
+                except OverflowError:
+                    # NumPy 2.5 raises on out-of-range datetime64 unit
+                    # conversions that previously silently overflowed.
+                    continue
                 if (not npdatetime_helpers.same_kind(value_unit(a),
                                                      value_unit(b))):
                     continue

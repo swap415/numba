@@ -5047,6 +5047,22 @@ def np_cross(a, b):
     if not type_can_asarray(a) or not type_can_asarray(b):
         raise TypingError("Inputs must be array-like.")
 
+    if numpy_version >= (2, 5):
+        # NumPy 2.5 removed support for 2-element (2D) input vectors in
+        # np.cross; cross products are only defined for 3-element vectors. The
+        # 2D case is available via cross2d from numba.np.extensions.
+        def impl(a, b):
+            a_ = np.asarray(a)
+            b_ = np.asarray(b)
+            if a_.shape[-1] != 3 or b_.shape[-1] != 3:
+                raise ValueError((
+                    "Incompatible dimensions for cross product\n"
+                    "(dimension must be 3)\n"
+                    "Use `cross2d(a, b)` from `numba.np.extensions`."
+                ))
+            return _cross(a_, b_)
+        return impl
+
     def impl(a, b):
         a_ = np.asarray(a)
         b_ = np.asarray(b)
