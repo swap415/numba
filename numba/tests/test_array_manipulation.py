@@ -893,14 +893,16 @@ class TestArrayManipulation(MemoryLeakMixin, TestCase):
                 yield tmp[slicer]
 
         def _check_fill_diagonal(arr, val):
-            for wrap in None, True, False:
+            # NOTE: omitting `wrap` (as opposed to passing it explicitly)
+            # forces a distinct compiled specialization per call-site (an
+            # Omitted-default type distinct from the explicit bool type),
+            # so it is exercised once below rather than for every
+            # array/val combination here to avoid needlessly doubling
+            # compile time across this test's large parameter space.
+            for wrap in True, False:
                 a = arr.copy()
                 b = arr.copy()
-
-                if wrap is None:
-                    params = {}
-                else:
-                    params = {'wrap': wrap}
+                params = {'wrap': wrap}
 
                 pyfunc(a, val, **params)
                 cfunc(b, val, **params)
@@ -913,6 +915,14 @@ class TestArrayManipulation(MemoryLeakMixin, TestCase):
         for arr in _multi_dimensional_array_variations_strided(3):
             for val in _val_variations():
                 _check_fill_diagonal(arr, val)
+
+        # exercise the omitted/default `wrap` argument path once; its
+        # result is identical to wrap=False, already covered above
+        a = np.zeros((3, 3))
+        b = a.copy()
+        pyfunc(a, 1)
+        cfunc(b, 1)
+        self.assertPreciseEqual(a, b)
 
         # non-numeric input arrays
         arr = np.array([True] * 9).reshape(3, 3)
