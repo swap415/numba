@@ -276,6 +276,10 @@ def array_dot_chain(a, b):
 def array_ctor(n, dtype):
     return np.ones(n, dtype=dtype)
 
+@jit(nopython=True)
+def _lower_clip_result_jit(a, func, a_min, a_max):
+    return np.expm1(func(a, a_min, a_max))
+
 class TestArrayMethods(MemoryLeakMixin, TestCase):
     """
     Test various array methods and array-related functions.
@@ -1690,12 +1694,9 @@ class TestArrayMethods(MemoryLeakMixin, TestCase):
     def _lower_clip_result_test_util(self, func, a, a_min, a_max):
         # verifies that type-inference is working on the return value
         # this used to trigger issue #3489
-        def lower_clip_result(a):
-            return np.expm1(func(a, a_min, a_max))
-
         np.testing.assert_almost_equal(
-            lower_clip_result(a),
-            jit(nopython=True)(lower_clip_result)(a))
+            np.expm1(func(a, a_min, a_max)),
+            _lower_clip_result_jit(a, func, a_min, a_max))
 
     def test_clip(self):
         has_out = (np_clip, np_clip_kwargs, array_clip, array_clip_kwargs)
