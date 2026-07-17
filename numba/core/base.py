@@ -263,18 +263,28 @@ class BaseContext(object):
         Refresh context with new declarations from known registries.
         Useful for third-party extensions.
         """
-        # load target specific registries
-        self.load_additional_registries()
+        # Guard against re-entrant refreshes: instantiating a builtin
+        # template below can trigger another refresh() of this same
+        # context before this call completes, which would otherwise
+        # redo the (expensive) registry scan once per template.
+        if getattr(self, '_refresh_in_progress', False):
+            return
+        self._refresh_in_progress = True
+        try:
+            # load target specific registries
+            self.load_additional_registries()
 
-        # Populate the builtin registry, this has to happen after loading
-        # additional registries as some of the "additional" registries write
-        # their implementations into the builtin_registry and would be missed if
-        # this ran first.
-        self.install_registry(builtin_registry)
+            # Populate the builtin registry, this has to happen after loading
+            # additional registries as some of the "additional" registries write
+            # their implementations into the builtin_registry and would be missed if
+            # this ran first.
+            self.install_registry(builtin_registry)
 
-        # Also refresh typing context, since @overload declarations can
-        # affect it.
-        self.typing_context.refresh()
+            # Also refresh typing context, since @overload declarations can
+            # affect it.
+            self.typing_context.refresh()
+        finally:
+            self._refresh_in_progress = False
 
     def load_additional_registries(self):
         """
