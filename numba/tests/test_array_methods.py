@@ -1687,15 +1687,20 @@ class TestArrayMethods(MemoryLeakMixin, TestCase):
         z = x + 1j*y
         np.testing.assert_equal(pyfunc(z), cfunc(z))
 
-    def _lower_clip_result_test_util(self, func, a, a_min, a_max):
+    def _lower_clip_result_test_util(self, func, lower_cfunc, a, a_min, a_max):
         # verifies that type-inference is working on the return value
         # this used to trigger issue #3489
-        def lower_clip_result(a):
+        #
+        # lower_cfunc is a dispatcher, built once by the caller for
+        # `np.expm1(func(a, a_min, a_max))`, and reused here so repeated
+        # calls hit Numba's per-signature compile cache instead of
+        # recompiling from scratch every time.
+        def lower_clip_result(a, a_min, a_max):
             return np.expm1(func(a, a_min, a_max))
 
         np.testing.assert_almost_equal(
-            lower_clip_result(a),
-            jit(nopython=True)(lower_clip_result)(a))
+            lower_clip_result(a, a_min, a_max),
+            lower_cfunc(a, a_min, a_max))
 
     def test_clip(self):
         has_out = (np_clip, np_clip_kwargs, array_clip, array_clip_kwargs)
@@ -1705,6 +1710,8 @@ class TestArrayMethods(MemoryLeakMixin, TestCase):
                   np.linspace(-10, 10, 40).reshape(5, 2, 4)):
             for pyfunc in has_out + has_no_out:
                 cfunc = jit(nopython=True)(pyfunc)
+                lower_cfunc = jit(nopython=True)(
+                    lambda a, a_min, a_max: np.expm1(cfunc(a, a_min, a_max)))
 
                 np.testing.assert_equal(pyfunc(a, 0, None), cfunc(a, 0, None))
                 np.testing.assert_equal(pyfunc(a, None, 0), cfunc(a, None, 0))
@@ -1718,7 +1725,7 @@ class TestArrayMethods(MemoryLeakMixin, TestCase):
                                             cfunc(a, -5, 5, cout))
                     np.testing.assert_equal(pyout, cout)
 
-                self._lower_clip_result_test_util(cfunc, a, -5, 5)
+                self._lower_clip_result_test_util(cfunc, lower_cfunc, a, -5, 5)
 
     def test_clip_errors(self):
         # Disable leak check since we expect an error to be raised
@@ -1748,6 +1755,8 @@ class TestArrayMethods(MemoryLeakMixin, TestCase):
         maxs = [0, 5, a_max_arr, None]
         for pyfunc in has_out + has_no_out:
             cfunc = jit(nopython=True)(pyfunc)
+            lower_cfunc = jit(nopython=True)(
+                lambda a, a_min, a_max: np.expm1(cfunc(a, a_min, a_max)))
 
             for a_min in mins:
                 for a_max in maxs:
@@ -1764,7 +1773,8 @@ class TestArrayMethods(MemoryLeakMixin, TestCase):
                                                 cfunc(a, a_min, a_max, cout))
                         np.testing.assert_equal(pyout, cout)
 
-                    self._lower_clip_result_test_util(cfunc, a, a_min, a_max)
+                    self._lower_clip_result_test_util(
+                        cfunc, lower_cfunc, a, a_min, a_max)
 
     def test_clip_min_max_errors(self):
         # Disable leak check since we expect an error to be raised

@@ -181,7 +181,19 @@ def _array_sum_axis_nop(arr, v):
     return arr
 
 
+_sum_axis_impl_cache = {}
+
+
 def gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero):
+    # cached because this is invoked on every lowering of np.sum(axis=...),
+    # and register_jitable(inner) below re-types/re-lowers the whole
+    # reduction body from scratch on each cache miss. Keyed on zero's exact
+    # dtype, not just its value: np.float32(0) == np.float64(0) so a plain
+    # value-based cache (e.g. lru_cache) would collide across dtypes.
+    key = (is_axis_const, const_axis_val, op, np.dtype(type(zero)))
+    if key in _sum_axis_impl_cache:
+        return _sum_axis_impl_cache[key]
+
     def inner(arr, axis):
         """
         function that performs sums over one specific axis
@@ -243,7 +255,9 @@ def gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero):
                     index_tuple4 = _gen_index_tuple(arr.shape, axis_index, 3)
                     result += arr[index_tuple4]
         return op(result, 0)
-    return inner
+    compiled = register_jitable(inner)
+    _sum_axis_impl_cache[key] = compiled
+    return compiled
 
 
 @lower_builtin(np.sum, types.Array, types.intp, types.DTypeSpec)
@@ -279,8 +293,7 @@ def array_sum_axis_dtype(context, builder, sig, args):
         sig = sig.replace(args=[ty_array, ty_axis, ty_dtype])
         is_axis_const = True
 
-    gen_impl = gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero)
-    compiled = register_jitable(gen_impl)
+    compiled = gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero)
 
     def array_sum_impl_axis(arr, axis, dtype):
         return compiled(arr, axis)
@@ -339,8 +352,7 @@ def array_sum_axis(context, builder, sig, args):
         sig = sig.replace(args=[ty_array, ty_axis])
         is_axis_const = True
 
-    gen_impl = gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero)
-    compiled = register_jitable(gen_impl)
+    compiled = gen_sum_axis_impl(is_axis_const, const_axis_val, op, zero)
 
     def array_sum_impl_axis(arr, axis):
         return compiled(arr, axis)
