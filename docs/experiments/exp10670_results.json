@@ -1,0 +1,350 @@
+{
+  "baseline": {
+    "phase": "baseline",
+    "versions": {
+      "numba": "0+untagged.1885.g63b7565",
+      "llvmlite": "0.49.0dev0",
+      "llvm": "22.1.0",
+      "numpy": "2.2.6"
+    },
+    "tagged_latches": [],
+    "correct": true,
+    "results": {
+      "add_for": {
+        "function": "_ZN8__main__10make_funcs12_3clocals_3e7add_forB2v1B38c8tJTIeFIjxB2IKSgI4CrvQClQZ6FczSBAA_3dE5ArrayIdLi1E1A7mutable7alignedEx",
+        "cond_br": 17,
+        "uncond_br": 11,
+        "total_br": 28,
+        "guards": {
+          "inner_empty_range": true,
+          "inner_remainder_mask7": true,
+          "xtraiter_eq0_dispatch": true,
+          "inner_main_entry_lt8": true,
+          "outer_remainder_mask": true,
+          "any_xtraiter": true
+        },
+        "unroll_named_blocks": 17,
+        "fadd_count": 27,
+        "max_fadd_run": 8,
+        "body_lines": 198,
+        "norm_hash": "2d461e1afd3b029f"
+      },
+      "add_while_uint": {
+        "function": "_ZN8__main__10make_funcs12_3clocals_3e14add_while_uintB2v2B38c8tJTIeFIjxB2IKSgI4CrvQClQZ6FczSBAA_3dE5ArrayIdLi1E1A7mutable7alignedEx",
+        "cond_br": 11,
+        "uncond_br": 7,
+        "total_br": 18,
+        "guards": {
+          "inner_empty_range": false,
+          "inner_remainder_mask7": false,
+          "xtraiter_eq0_dispatch": true,
+          "inner_main_entry_lt8": false,
+          "outer_remainder_mask": true,
+          "any_xtraiter": true
+        },
+        "unroll_named_blocks": 5,
+        "fadd_count": 10,
+        "max_fadd_run": 2,
+        "body_lines": 136,
+        "norm_hash": "b112aacaa76d4484"
+      },
+      "add_for_const": {
+        "function": "_ZN8__main__10make_funcs12_3clocals_3e13add_for_constB2v3B38c8tJTIeFIjxB2IKSgI4CrvQClQZ6FczSBAA_3dE5ArrayIdLi1E1A7mutable7alignedE",
+        "cond_br": 5,
+        "uncond_br": 2,
+        "total_br": 7,
+        "guards": {
+          "inner_empty_range": false,
+          "inner_remainder_mask7": false,
+          "xtraiter_eq0_dispatch": true,
+          "inner_main_entry_lt8": false,
+          "outer_remainder_mask": true,
+          "any_xtraiter": true
+        },
+        "unroll_named_blocks": 3,
+        "fadd_count": 25,
+        "max_fadd_run": 5,
+        "body_lines": 90,
+        "norm_hash": "1bc19d3330d99ba5"
+      }
+    }
+  },
+  "inner_disable": {
+    "phase": "inner_disable",
+    "versions": {
+      "numba": "0+untagged.1885.g63b7565",
+      "llvmlite": "0.49.0dev0",
+      "llvm": "22.1.0",
+      "numpy": "2.2.6"
+    },
+    "tagged_latches": [
+      [
+        78,
+        74,
+        "llvm.loop.unroll.disable"
+      ]
+    ],
+    "correct": true,
+    "results": {
+      "add_for": {
+        "function": "_ZN8__main__10make_funcs12_3clocals_3e7add_forB2v1B38c8tJTIeFIjxB2IKSgI4CrvQClQZ6FczSBAA_3dE5ArrayIdLi1E1A7mutable7alignedEx",
+        "cond_br": 11,
+        "uncond_br": 7,
+        "total_br": 18,
+        "guards": {
+          "inner_empty_range": true,
+          "inner_remainder_mask7": false,
+          "xtraiter_eq0_dispatch": true,
+          "inner_main_entry_lt8": false,
+          "outer_remainder_mask": true,
+          "any_xtraiter": true
+        },
+        "unroll_named_blocks": 5,
+        "fadd_count": 5,
+        "max_fadd_run": 1,
+        "body_lines": 138,
+        "norm_hash": "80fae9f35e7987a7"
+      },
+      "add_while_uint": {
+        "function": "_ZN8__main__10make_funcs12_3clocals_3e14add_while_uintB2v2B38c8tJTIeFIjxB2IKSgI4CrvQClQZ6FczSBAA_3dE5ArrayIdLi1E1A7mutable7alignedEx",
+        "cond_br": 11,
+        "uncond_br": 7,
+        "total_br": 18,
+        "guards": {
+          "inner_empty_range": false,
+          "inner_remainder_mask7": false,
+          "xtraiter_eq0_dispatch": true,
+          "inner_main_entry_lt8": false,
+          "outer_remainder_mask": true,
+          "any_xtraiter": true
+        },
+        "unroll_named_blocks": 5,
+        "fadd_count": 10,
+        "max_fadd_run": 2,
+        "body_lines": 136,
+        "norm_hash": "b112aacaa76d4484"
+      },
+      "add_for_const": {
+        "function": "_ZN8__main__10make_funcs12_3clocals_3e13add_for_constB2v3B38c8tJTIeFIjxB2IKSgI4CrvQClQZ6FczSBAA_3dE5ArrayIdLi1E1A7mutable7alignedE",
+        "cond_br": 5,
+        "uncond_br": 2,
+        "total_br": 7,
+        "guards": {
+          "inner_empty_range": false,
+          "inner_remainder_mask7": false,
+          "xtraiter_eq0_dispatch": true,
+          "inner_main_entry_lt8": false,
+          "outer_remainder_mask": true,
+          "any_xtraiter": true
+        },
+        "unroll_named_blocks": 3,
+        "fadd_count": 25,
+        "max_fadd_run": 5,
+        "body_lines": 90,
+        "norm_hash": "1bc19d3330d99ba5"
+      }
+    }
+  },
+  "all_runtime_disable": {
+    "phase": "all_runtime_disable",
+    "versions": {
+      "numba": "0+untagged.1885.g63b7565",
+      "llvmlite": "0.49.0dev0",
+      "llvm": "22.1.0",
+      "numpy": "2.2.6"
+    },
+    "tagged_latches": [
+      [
+        78,
+        74,
+        "llvm.loop.unroll.runtime.disable"
+      ],
+      [
+        108,
+        46,
+        "llvm.loop.unroll.runtime.disable"
+      ],
+      [
+        132,
+        86,
+        "llvm.loop.unroll.runtime.disable"
+      ],
+      [
+        137,
+        46,
+        "llvm.loop.unroll.runtime.disable"
+      ],
+      [
+        78,
+        74,
+        "llvm.loop.unroll.runtime.disable"
+      ],
+      [
+        108,
+        46,
+        "llvm.loop.unroll.runtime.disable"
+      ]
+    ],
+    "correct": true,
+    "results": {
+      "add_for": {
+        "function": "_ZN8__main__10make_funcs12_3clocals_3e7add_forB2v1B38c8tJTIeFIjxB2IKSgI4CrvQClQZ6FczSBAA_3dE5ArrayIdLi1E1A7mutable7alignedEx",
+        "cond_br": 4,
+        "uncond_br": 2,
+        "total_br": 6,
+        "guards": {
+          "inner_empty_range": true,
+          "inner_remainder_mask7": false,
+          "xtraiter_eq0_dispatch": false,
+          "inner_main_entry_lt8": false,
+          "outer_remainder_mask": false,
+          "any_xtraiter": false
+        },
+        "unroll_named_blocks": 0,
+        "fadd_count": 1,
+        "max_fadd_run": 1,
+        "body_lines": 40,
+        "norm_hash": "965d57a886f4627d"
+      },
+      "add_while_uint": {
+        "function": "_ZN8__main__10make_funcs12_3clocals_3e14add_while_uintB2v2B38c8tJTIeFIjxB2IKSgI4CrvQClQZ6FczSBAA_3dE5ArrayIdLi1E1A7mutable7alignedEx",
+        "cond_br": 4,
+        "uncond_br": 2,
+        "total_br": 6,
+        "guards": {
+          "inner_empty_range": false,
+          "inner_remainder_mask7": false,
+          "xtraiter_eq0_dispatch": false,
+          "inner_main_entry_lt8": false,
+          "outer_remainder_mask": false,
+          "any_xtraiter": false
+        },
+        "unroll_named_blocks": 0,
+        "fadd_count": 2,
+        "max_fadd_run": 2,
+        "body_lines": 39,
+        "norm_hash": "c71fd773bc9c29b1"
+      },
+      "add_for_const": {
+        "function": "_ZN8__main__10make_funcs12_3clocals_3e13add_for_constB2v3B38c8tJTIeFIjxB2IKSgI4CrvQClQZ6FczSBAA_3dE5ArrayIdLi1E1A7mutable7alignedE",
+        "cond_br": 2,
+        "uncond_br": 1,
+        "total_br": 3,
+        "guards": {
+          "inner_empty_range": false,
+          "inner_remainder_mask7": false,
+          "xtraiter_eq0_dispatch": false,
+          "inner_main_entry_lt8": false,
+          "outer_remainder_mask": false,
+          "any_xtraiter": false
+        },
+        "unroll_named_blocks": 0,
+        "fadd_count": 5,
+        "max_fadd_run": 5,
+        "body_lines": 27,
+        "norm_hash": "e7121552191a767c"
+      }
+    }
+  },
+  "all_disable": {
+    "phase": "all_disable",
+    "versions": {
+      "numba": "0+untagged.1885.g63b7565",
+      "llvmlite": "0.49.0dev0",
+      "llvm": "22.1.0",
+      "numpy": "2.2.6"
+    },
+    "tagged_latches": [
+      [
+        78,
+        74,
+        "llvm.loop.unroll.disable"
+      ],
+      [
+        108,
+        46,
+        "llvm.loop.unroll.disable"
+      ],
+      [
+        132,
+        86,
+        "llvm.loop.unroll.disable"
+      ],
+      [
+        137,
+        46,
+        "llvm.loop.unroll.disable"
+      ],
+      [
+        78,
+        74,
+        "llvm.loop.unroll.disable"
+      ],
+      [
+        108,
+        46,
+        "llvm.loop.unroll.disable"
+      ]
+    ],
+    "correct": true,
+    "results": {
+      "add_for": {
+        "function": "_ZN8__main__10make_funcs12_3clocals_3e7add_forB2v1B38c8tJTIeFIjxB2IKSgI4CrvQClQZ6FczSBAA_3dE5ArrayIdLi1E1A7mutable7alignedEx",
+        "cond_br": 4,
+        "uncond_br": 2,
+        "total_br": 6,
+        "guards": {
+          "inner_empty_range": true,
+          "inner_remainder_mask7": false,
+          "xtraiter_eq0_dispatch": false,
+          "inner_main_entry_lt8": false,
+          "outer_remainder_mask": false,
+          "any_xtraiter": false
+        },
+        "unroll_named_blocks": 0,
+        "fadd_count": 1,
+        "max_fadd_run": 1,
+        "body_lines": 40,
+        "norm_hash": "965d57a886f4627d"
+      },
+      "add_while_uint": {
+        "function": "_ZN8__main__10make_funcs12_3clocals_3e14add_while_uintB2v2B38c8tJTIeFIjxB2IKSgI4CrvQClQZ6FczSBAA_3dE5ArrayIdLi1E1A7mutable7alignedEx",
+        "cond_br": 4,
+        "uncond_br": 2,
+        "total_br": 6,
+        "guards": {
+          "inner_empty_range": false,
+          "inner_remainder_mask7": false,
+          "xtraiter_eq0_dispatch": false,
+          "inner_main_entry_lt8": false,
+          "outer_remainder_mask": false,
+          "any_xtraiter": false
+        },
+        "unroll_named_blocks": 0,
+        "fadd_count": 2,
+        "max_fadd_run": 2,
+        "body_lines": 39,
+        "norm_hash": "c71fd773bc9c29b1"
+      },
+      "add_for_const": {
+        "function": "_ZN8__main__10make_funcs12_3clocals_3e13add_for_constB2v3B38c8tJTIeFIjxB2IKSgI4CrvQClQZ6FczSBAA_3dE5ArrayIdLi1E1A7mutable7alignedE",
+        "cond_br": 3,
+        "uncond_br": 2,
+        "total_br": 5,
+        "guards": {
+          "inner_empty_range": false,
+          "inner_remainder_mask7": false,
+          "xtraiter_eq0_dispatch": false,
+          "inner_main_entry_lt8": false,
+          "outer_remainder_mask": false,
+          "any_xtraiter": false
+        },
+        "unroll_named_blocks": 0,
+        "fadd_count": 1,
+        "max_fadd_run": 1,
+        "body_lines": 34,
+        "norm_hash": "6a91d0b92f43e811"
+      }
+    }
+  }
+}
