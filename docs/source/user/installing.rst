@@ -210,6 +210,8 @@ vary with target operating system and hardware. The following lists them all
   * Compiler toolchain mentioned above, if you would like to use ``pycc`` for
     Ahead-of-Time (AOT) compilation
   * ``r2pipe`` - required for assembly CFG inspection.
+  * ``capstone`` - required for ``inspect_codegen`` ISA summary.
+  * ``llvm-mca`` (LLVM tools) - required for ``inspect_codegen`` throughput.
   * ``radare2`` as an executable on the ``$PATH`` - required for assembly CFG
     inspection. `See here <https://github.com/radareorg/radare2>`_ for
     information on obtaining and installing.
