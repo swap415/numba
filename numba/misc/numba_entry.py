@@ -27,6 +27,15 @@ def make_parser():
     parser.add_argument('--sys-json', nargs=1,
                         help='Saves the system info dict as a json file')
     parser.add_argument('filename', nargs='?', help='Python source filename')
+    parser.add_argument(
+        '--codegen-card', action='store_true',
+        help='Print a compact ISA + llvm-mca card for a SAXPY demo '
+             '(or --codegen-compare for IEEE vs fastmath)',
+    )
+    parser.add_argument(
+        '--codegen-compare', action='store_true',
+        help='Compare IEEE vs fastmath SAXPY codegen cards',
+    )
     return parser
 
 
@@ -41,6 +50,11 @@ def main():
     if args.gdbinfo:
         print("GDB info:")
         display_gdbinfo()
+
+    if args.codegen_card or args.codegen_compare:
+        from numba.misc.codegen_card import main as codegen_main
+        argv = ['--compare'] if args.codegen_compare else []
+        sys.exit(codegen_main(argv))
 
     if args.sysinfo or args.gdbinfo:
         sys.exit(0)

@@ -61,6 +61,8 @@ To see all available options, use ``numba --help``::
                             Output source annotation as html
     -s, --sysinfo         Output system information for bug reporting
     --sys-json SYS_JSON   Saves the system info dict as a json file
+    --codegen-card        Compact ISA + llvm-mca demo card
+    --codegen-compare     Compare IEEE vs fastmath SAXPY codegen cards
 
 
 .. _cli_sysinfo:
