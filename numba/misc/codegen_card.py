@@ -359,7 +359,7 @@ def run_mca(asm: str, cpu: str, triple: Optional[str] = None) -> MCASummary:
 def _notes_for(isa: Optional[ISASummary], loop: str, mca: tuple) -> tuple:
     notes = []
     if isa is not None and not isa.has_fma:
-        notes.append("no FMA (IEEE default; try @njit(fastmath=True))")
+        notes.append("no FMA (IEEE default; try @jit(fastmath=True))")
     if isa is not None and isa.has_fma:
         notes.append("FMA present")
     if "vmulpd" in loop and "vfmadd" not in loop:
@@ -498,9 +498,9 @@ def compare_codegen(before: Any, after: Any, **kwargs) -> CompareReport:
 
 def _demo_saxpy(fastmath=False):
     import numpy as np
-    from numba import njit
+    from numba import jit
 
-    @njit(fastmath=fastmath)
+    @jit(fastmath=fastmath)
     def saxpy(a, x, y, out):
         for i in range(x.shape[0]):
             out[i] = a * x[i] + y[i]

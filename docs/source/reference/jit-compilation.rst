@@ -297,10 +297,10 @@ Dispatcher objects
 
       Example::
 
-        from numba import njit
+        from numba import jit
         import numpy as np
 
-        @njit
+        @jit
         def saxpy(a, x, y, out):
             for i in range(x.shape[0]):
                 out[i] = a * x[i] + y[i]

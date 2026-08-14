@@ -26,7 +26,7 @@ CLI: `python -m numba.misc.codegen_card` and `--compare`.
 
 ## How to read it
 
-- `no FMA` + `vmul+vadd` → try `@njit(fastmath=True)` if IEEE allows.
+- `no FMA` + `vmul+vadd` → try `@jit(fastmath=True)` if IEEE allows.
 - MCA cycles/iter is compute-only. If wall time ≫ MCA estimate, the kernel is bandwidth-bound. Do not rewrite arithmetic.
 - Same host asm + different `-mcpu` is a schedule model, not a rerun. Zen4 ymm looking worse than Alder Lake is the 256-bit model, not a regression.
 - Retarget (`retarget=('apple-m1',)`) needs kernel-only IR + `llc`.

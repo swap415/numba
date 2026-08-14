@@ -170,9 +170,9 @@ class TestExtract(TestCase):
 
 def _compile_saxpy(fastmath=False):
     import numpy as np
-    from numba import njit
+    from numba import jit
 
-    @njit(fastmath=fastmath)
+    @jit(fastmath=fastmath)
     def saxpy(a, x, y, out):
         for i in range(x.shape[0]):
             out[i] = a * x[i] + y[i]
