@@ -137,7 +137,8 @@ def uint64_to_unit_float64(x):
 def uint64_to_unit_float32(x):
     '''Convert uint64 to float32 value in the range [0.0, 1.0)'''
     x = uint64(x)
-    return float32(uint64_to_unit_float64(x))
+    return float32(x >> uint32(40)) * (float32(1) /
+                                       float32(uint64(1) << uint32(24)))
 
 
 @jit(forceobj=_forceobj, looplift=_looplift, nopython=_nopython)

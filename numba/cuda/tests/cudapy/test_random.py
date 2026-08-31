@@ -8,7 +8,8 @@ from numba.cuda.testing import skip_on_cudasim, CUDATestCase
 
 from numba.cuda.random import \
     xoroshiro128p_uniform_float32, xoroshiro128p_normal_float32, \
-    xoroshiro128p_uniform_float64, xoroshiro128p_normal_float64
+    xoroshiro128p_uniform_float64, xoroshiro128p_normal_float64, \
+    uint64_to_unit_float32
 
 
 # Distributions
@@ -78,6 +79,33 @@ class TestCudaRandomXoroshiro128p(CUDATestCase):
 
     def test_uniform_float32(self):
         self.check_uniform(rng_kernel_float32, np.float32)
+
+    def test_uint64_to_unit_float32_never_one(self):
+        # Regression for #10810: narrowing a 53-bit float64 unit value to
+        # float32 rounds up to 1.0 for draws at or above 2**64 - 2**39.
+        samples = np.array(
+            [0, 1, 1 << 39, 1 << 63,
+             (1 << 64) - (1 << 39), (1 << 64) - 2049, (1 << 64) - 1],
+            dtype=np.uint64,
+        )
+        for x in samples:
+            u = uint64_to_unit_float32(x)
+            self.assertGreaterEqual(u, np.float32(0.0))
+            self.assertLess(u, np.float32(1.0))
+
+    def test_uniform_float32_never_one(self):
+        # End-to-end: seed whose first draw is 2**64 - 2**39 (see #10810).
+        seed = 2362621375128073891
+
+        @cuda.jit
+        def draw(states, out):
+            out[0] = xoroshiro128p_uniform_float32(states, 0)
+
+        states = cuda.random.create_xoroshiro128p_states(1, seed=seed)
+        out = np.zeros(1, dtype=np.float32)
+        draw[1, 1](states, out)
+        self.assertLess(out[0], np.float32(1.0))
+        self.assertGreaterEqual(out[0], np.float32(0.0))
 
     @skip_on_cudasim('skip test for speed under cudasim')
     def test_uniform_float64(self):

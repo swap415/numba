@@ -1,0 +1,7 @@
+Fix ``xoroshiro128p_uniform_float32`` returning exactly ``1.0``
+---------------------------------------------------------------
+
+``uint64_to_unit_float32`` previously converted through a 53-bit float64 unit
+value and then narrowed to float32, which rounds up to ``1.0`` for about one
+draw in ``2**25``. It now takes the top 24 bits and scales by ``2**-24``, so
+the documented range ``[0.0, 1.0)`` holds for every input.
