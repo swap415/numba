@@ -226,6 +226,8 @@ vary with target operating system and hardware. The following lists them all
     compilation
   * Compiler toolchain mentioned above, if you would like to use ``pycc`` for
     Ahead-of-Time (AOT) compilation
+  * ``capstone`` 5.x - for CPU object disassembly with ``inspect_disasm``.
+    Install with ``python -m pip install "capstone>=5,<6"``.
   * ``r2pipe`` - required for assembly CFG inspection.
   * ``radare2`` as an executable on the ``$PATH`` - required for assembly CFG
     inspection. `See here <https://github.com/radareorg/radare2>`_ for

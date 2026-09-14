@@ -199,6 +199,33 @@ Dispatcher objects
       signature keyword is specified a string corresponding to that
       individual signature is returned.
 
+   .. method:: inspect_disasm(signature=None)
+
+      Return Capstone disassembly of the compiled object's text sections as a
+      dictionary keyed by signatures. Specify a signature to return one string.
+      Requires the optional ``capstone`` 5.x package and supports x86 (32-bit
+      and 64-bit) and AArch64 CPUs. x86 output uses Intel syntax.
+
+      Unlike ``inspect_asm``, this decodes emitted object bytes. Output includes
+      wrappers and helpers, and may include padding or embedded data. Addresses
+      are object-relative and relocations are not applied; this is not a view
+      of live JIT memory and does not recover symbols, source lines, or a CFG.
+      Code loaded from the compilation cache is unavailable and raises
+      ``RuntimeError``, as does a missing Capstone dependency. Unsupported
+      architectures or incomplete decoding raise ``ValueError``; incomplete
+      decoding can result from embedded data or unsupported instructions.
+
+      Example::
+
+         from numba import jit
+
+         @jit
+         def increment(x):
+             return x + 1
+
+         increment(2)
+         print(increment.inspect_disasm(increment.signatures[0]))
+
    .. method:: inspect_cfg(signature=None, show_wrapped)
 
       Return a dictionary keying compiled function signatures to the

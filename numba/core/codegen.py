@@ -16,7 +16,7 @@ from numba.core.runtime.nrtopt import remove_redundant_nrt_refct
 from numba.core.runtime import rtsys
 from numba.core.compiler_lock import require_global_compiler_lock
 from numba.core.errors import NumbaInvalidConfigWarning
-from numba.misc.inspection import disassemble_elf_to_cfg
+from numba.misc.inspection import disassemble_elf_to_cfg, disassemble_object
 from numba.misc.llvm_pass_timings import PassTimingsCollection
 
 
@@ -840,6 +840,12 @@ class CPUCodeLibrary(CodeLibrary):
     def get_asm_str(self):
         self._sentry_cache_disable_inspection()
         return str(self._codegen._tm.emit_assembly(self._final_module))
+
+    def get_disasm_str(self) -> str:
+        if self._disable_inspection:
+            raise RuntimeError("Disassembly is unavailable for cached code.")
+        return disassemble_object(self._get_compiled_object(),
+                                  self._final_module.triple)
 
     def get_function_cfg(self, name, py_func=None, **kwargs):
         """
