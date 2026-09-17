@@ -157,40 +157,35 @@ def _compile_s(fn, args) -> float:
     return time.perf_counter() - t0
 
 
-def _whisper_jit_pair(numba):
-    """Decorate in Whisper's order: backtrace first, then dtw_cpu."""
-    w_backtrace = numba.jit(nopython=True)(backtrace)
-    saved = dtw_cpu.__globals__["backtrace"]
-    dtw_cpu.__globals__["backtrace"] = w_backtrace
-    try:
-        w_dtw_cpu = numba.jit(nopython=True, parallel=True)(dtw_cpu)
-    finally:
-        dtw_cpu.__globals__["backtrace"] = saved
-    return w_backtrace, w_dtw_cpu
-
-
 def run_micro() -> dict:
     import numba
-
-    w_backtrace, w_dtw_cpu = _whisper_jit_pair(numba)
-    dtw_cpu_serial_nb = numba.jit(nopython=True)(dtw_cpu)
-    dtw_fill_nb = numba.jit(nopython=True)(dtw_fill)
 
     rng = np.random.default_rng(0)
     # (tokens, frames). 1500 frames = 30s Whisper window.
     shapes = [(32, 300), (64, 1500), (128, 1500), (256, 1500)]
-
     x_tiny = rng.standard_normal((8, 8), dtype=np.float32)
+
+    # Whisper jits backtrace first, then dtw_cpu. Compile every shape while
+    # that Dispatcher is still the global dtw_cpu calls; Numba type-infers
+    # the call target at compile time, not at later dispatch.
+    w_backtrace = numba.jit(nopython=True)(backtrace)
+    dtw_cpu.__globals__["backtrace"] = w_backtrace
+    w_dtw_cpu = numba.jit(nopython=True, parallel=True)(dtw_cpu)
+    dtw_cpu_serial_nb = numba.jit(nopython=True)(dtw_cpu)
+    dtw_fill_nb = numba.jit(nopython=True)(dtw_fill)
+
     compile_times = {
         "whisper_backtrace": _compile_s(w_backtrace, (dtw_fill(x_tiny),)),
         "whisper_dtw_cpu": _compile_s(w_dtw_cpu, (x_tiny,)),
         "dtw_cpu_serial": _compile_s(dtw_cpu_serial_nb, (x_tiny,)),
         "dtw_fill": _compile_s(dtw_fill_nb, (x_tiny,)),
     }
-    x_warm = rng.standard_normal(shapes[-1], dtype=np.float32)
-    w_dtw_cpu(x_warm)
-    dtw_cpu_serial_nb(x_warm)
-    dtw_fill_nb(x_warm)
+    for shape in shapes:
+        x_warm = rng.standard_normal(shape, dtype=np.float32)
+        w_dtw_cpu(x_warm)
+        dtw_cpu_serial_nb(x_warm)
+        dtw_fill_nb(x_warm)
+    dtw_cpu.__globals__["backtrace"] = backtrace
 
     rows = []
     for shape in shapes:
