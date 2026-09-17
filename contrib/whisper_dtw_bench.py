@@ -21,6 +21,22 @@ backtrace is O(path length) ~ O(N+M).
 Sizes: a 30s Whisper window is 1500 time frames (TOKENS_PER_SECOND=50).
 N is the number of text tokens in the window (~32-256).
 
+Measured 2026-09-16, 4 vCPU, Python 3.12.3, numba 0.67.0, torch 2.14.0+cpu,
+whisper 20250625, tiny.en, JFK 11s clip (DTW matrix 23x550):
+
+    backtrace: ~1.0x vs Python (10-20 us). JIT does not help.
+    dtw_cpu 128x1500: ~55x (Python ~110 ms, Numba ~2 ms).
+    dtw_cpu parallel=True is slightly slower than serial nopython.
+    first JIT of dtw_cpu: ~0.7-1.1 s.
+
+    default transcribe: Numba is not called. JIT on/off is noise.
+    word_timestamps=True: +~190 ms from the extra decoder pass, not DTW.
+    DTW with JIT: ~130 us (0.03% of wall). without: ~8.6 ms (2.2%).
+    wall-clock word_timestamps JIT-off/on: ~1.0x.
+
+Numba makes the DP fill fast. It does not move Whisper throughput. backtrace
+is not the hot path.
+
 Usage:
     python contrib/whisper_dtw_bench.py
     python contrib/whisper_dtw_bench.py --skip-e2e
@@ -287,10 +303,14 @@ def print_micro(result: dict) -> None:
 
 
 def run_e2e(audio_path: str, repeats: int) -> dict:
+    import sys
     import torch
     import whisper
     from whisper import timing as tmod
-    from whisper import transcribe as tscript
+
+    # whisper/__init__.py binds whisper.transcribe to the function, shadowing
+    # the submodule. The real module still lives in sys.modules.
+    tscript = sys.modules["whisper.transcribe"]
 
     audio = whisper.load_audio(audio_path)
     duration = audio.shape[0] / whisper.audio.SAMPLE_RATE
