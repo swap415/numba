@@ -21,12 +21,28 @@ To address the problem, the following are needed:
 1. Better definitions for the semantics of compiler flags. Preferably, all flags should
    limit their effect to the current function. (TODO)
 2. Allow compiler flags to be inherited from the caller. (Done)
-3. Consider compiler flags in function resolution. (TODO)
+3. Consider compiler flags in function resolution. (Done for CPU dispatchers)
 
 :class:`numba.core.targetconfig.ConfigStack` is used to propagate the compiler flags
 throughout the compiler. At the start of the compilation, the flags are pushed
 into the ``ConfigStack``, which maintains a thread-local stack for the
 compilation. Thus, callees can check the flags in the caller.
+
+CPU dispatchers select separate compiled versions when inherited ``fastmath``,
+``error_model``, ``forceinline``, or ``_nrt`` options differ. Explicit callee
+options take precedence over the caller's options. Calls from Python use the
+callee's own options and defaults. Inherited versions are private dispatchers;
+the public overload table and inspection methods describe the default version.
+Disk cache entries distinguish effective compiler flags.
+
+Targets opt into this selection by listing their inherited user-facing option
+names in ``TargetOptions.inheritable``. The corresponding option mappings must
+accept the resolved flag values. Targets without this declaration retain their
+existing compilation behavior.
+
+This selection applies to calls that retain a dispatcher boundary. Numba IR
+inlining, such as ``inline='always'``, copies the callee's body into the caller
+before lowering and continues to use the caller's flags for that body.
 
 .. autoclass:: numba.core.targetconfig.ConfigStack
     :members:

@@ -561,7 +561,8 @@ class Dispatcher(WeakType, Callable, Dummy):
         """
         Get the compiled overload for the given signature.
         """
-        return self.dispatcher.get_overload(sig.args)
+        dispatcher = self.dispatcher._get_dispatcher_for_flags()
+        return dispatcher.get_overload(sig.args)
 
     def get_impl_key(self, sig):
         """
@@ -704,7 +705,8 @@ class NumberClass(Callable, DTypeSpec, Opaque):
         return self.instance_type
 
 
-_RecursiveCallOverloads = namedtuple("_RecursiveCallOverloads", "qualname,uid")
+_RecursiveCallOverloads = namedtuple("_RecursiveCallOverloads",
+                                    "qualname,uid,abi_tags")
 
 
 class RecursiveCall(Opaque):
@@ -722,7 +724,7 @@ class RecursiveCall(Opaque):
         if self._overloads is None:
             self._overloads = {}
 
-    def add_overloads(self, args, qualname, uid):
+    def add_overloads(self, args, qualname, uid, abi_tags):
         """Add an overload of the function.
 
         Parameters
@@ -733,8 +735,10 @@ class RecursiveCall(Opaque):
             function qualifying name
         uid :
             unique id
+        abi_tags :
+            callee ABI tags
         """
-        self._overloads[args] = _RecursiveCallOverloads(qualname, uid)
+        self._overloads[args] = _RecursiveCallOverloads(qualname, uid, abi_tags)
 
     def get_overloads(self, args):
         """Get the qualifying name and unique id for the overload given the

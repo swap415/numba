@@ -17,7 +17,7 @@ from pathlib import Path
 import llvmlite.binding as ll
 import numpy as np
 
-from numba import njit
+from numba import jit, njit
 from numba.core import codegen
 from numba.core.caching import (
     UserWideCacheLocator,
@@ -320,6 +320,34 @@ class DispatcherCacheUsecasesTest(BaseCacheTest):
 
 
 class TestCache(DispatcherCacheUsecasesTest):
+
+    def test_caching_inline_cost_model(self):
+        def cost_model(*args):
+            return False
+
+        mod = self.import_module()
+        for hits in (0, 1):
+            func = jit(cache=True, inline=cost_model)(mod.cancellation_usecase)
+            self.assertEqual(func(0.5, 1e16), 0.0)
+            self.check_hits(func, hits, 1 - hits)
+
+    def test_caching_target_options(self):
+        for fast_first in (False, True):
+            cache_dir = temp_directory('test_cache_flags')
+            for seed, hits in ((1, 0), (2, 1)):
+                with self.subTest(fast_first=fast_first, seed=seed):
+                    code = f"""if 1:
+                        import sys
+                        sys.path.insert(0, {self.tempdir!r})
+                        from {self.modname} import check_compiler_flags
+                        check_compiler_flags({fast_first}, {hits})
+                    """
+                    env = dict(os.environ, PYTHONHASHSEED=str(seed),
+                               NUMBA_CACHE_DIR=cache_dir)
+                    result = subprocess.run([sys.executable, '-c', code],
+                                            capture_output=True, env=env)
+                    self.assertEqual(result.returncode, 0,
+                                     result.stderr.decode())
 
     def test_caching(self):
         self.check_pycache(0)

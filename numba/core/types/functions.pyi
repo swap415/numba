@@ -220,6 +220,7 @@ class NumberClass(Callable, DTypeSpec, Opaque, Generic[_T_co]):
 class _RecursiveCallOverloads(NamedTuple):
     qualname: str
     uid: int
+    abi_tags: Sequence[str]
 
 class RecursiveCall(Opaque, Generic[_DispatcherT_co]):
     dispatcher_type: Dispatcher[_DispatcherT_co]
@@ -235,5 +236,6 @@ class RecursiveCall(Opaque, Generic[_DispatcherT_co]):
         args: tuple[Type, ...],
         qualname: str,
         uid: int,
+        abi_tags: Sequence[str],
     ) -> None: ...
     def get_overloads(self, args: tuple[Type, ...]) -> _RecursiveCallOverloads: ...

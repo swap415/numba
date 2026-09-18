@@ -817,6 +817,17 @@ class FunctionCache(Cache):
     """
     _impl_class = CompileResultCacheImpl
 
+    def __init__(self, py_func, flags=None):
+        self._flags = flags.copy() if flags is not None else None
+        self._inline = None
+        if flags is not None and flags.inline.has_cost_model:
+            self._inline = dumps(flags.inline.value)
+            self._flags.inline = 'never'
+        super().__init__(py_func)
+
+    def _index_key(self, sig, codegen):
+        return super()._index_key(sig, codegen) + (self._flags, self._inline)
+
 
 # Remember used cache filename prefixes.
 _lib_cache_prefixes = set([''])

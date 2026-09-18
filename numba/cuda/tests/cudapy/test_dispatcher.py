@@ -2,7 +2,9 @@ import numpy as np
 import threading
 
 from numba import boolean, config, cuda, float32, float64, int32, int64, void
+from numba.core.compiler import Flags
 from numba.core.errors import TypingError
+from numba.core.targetconfig import ConfigStack
 from numba.cuda.testing import skip_on_cudasim, unittest, CUDATestCase
 import math
 
@@ -109,6 +111,17 @@ class TestDispatcherSpecialization(CUDATestCase):
 
 class TestDispatcher(CUDATestCase):
     """Most tests based on those in numba.tests.test_dispatcher."""
+
+    @skip_on_cudasim('The simulator does not use dispatchers')
+    def test_no_cpu_flag_inheritance(self):
+        @cuda.jit(device=True)
+        def device(x):
+            return x
+
+        flags = Flags()
+        flags.fastmath = True
+        with ConfigStack().enter(flags):
+            self.assertIs(device._get_dispatcher_for_flags(), device)
 
     def test_coerce_input_types(self):
         # Do not allow unsafe conversions if we can still compile other

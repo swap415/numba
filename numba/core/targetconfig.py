@@ -227,10 +227,9 @@ class TargetConfig(metaclass=_MetaTargetConfig):
         """
         self._guard_option(name)
         if not self.is_set(name):
-            cstk = ConfigStack()
-            if cstk:
+            top = ConfigStack.top_or_none()
+            if top is not None:
                 # inherit
-                top = cstk.top()
                 setattr(self, name, getattr(top, name))
             elif default is not _NotSet:
                 setattr(self, name, default)
