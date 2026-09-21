@@ -463,6 +463,49 @@ Beware that enabling debug info significantly increases the memory consumption
 for each compiled function.  For large application, this may cause out-of-memory
 error.
 
+.. _profiling-with-perf:
+
+Profiling JIT-compiled code with Linux perf
+-------------------------------------------
+
+On Linux, :envvar:`NUMBA_ENABLE_PROFILING` registers LLVM's perf JIT-event
+listener. The listener writes jitdump data containing generated symbols and
+DWARF source locations. A typical workflow is:
+
+.. code-block:: console
+
+   $ mkdir -p .jitdump
+   $ JITDUMPDIR="$PWD/.jitdump" NUMBA_ENABLE_PROFILING=1 \
+       perf record -k 1 -o perf.data -- python workload.py
+   $ perf inject --jit -i perf.data -o perf.jit.data
+   $ perf report -i perf.jit.data
+   $ perf annotate -i perf.jit.data
+
+``perf inject --jit`` converts the jitdump entries into synthetic ELF images
+and adds mappings for them to the output data. Keep the jitdump files until
+this step has completed. The explicit monotonic clock id keeps perf timestamps
+aligned with LLVM's jitdump timestamps.
+
+Enabling profiling also makes :envvar:`NUMBA_DEBUGINFO` default to ``1``. This
+provides line information, but it increases compilation memory and disables
+LLVM-level inlining. Set ``NUMBA_DEBUGINFO=0`` explicitly for a symbol-level
+profile that is closer to normal optimized compilation.
+
+The capability can be checked without creating a JIT engine:
+
+.. code-block:: python
+
+   from llvmlite import binding as llvm
+
+   print(llvm.has_perf_jit_events)
+
+The value is ``True`` for official Linux packages. Custom llvmlite builds must
+configure LLVM with ``LLVM_USE_PERF=ON`` and link the ``PerfJITEvents``
+component. LLVM's listener does not emit jitdump unwind records, so symbols
+and source annotation are supported but complete JIT stack unwinding is not
+guaranteed. The jitdump directory and synthetic ELF files can be removed after
+the processed ``perf.jit.data`` is no longer needed.
+
 Using Numba's direct ``gdb`` bindings in ``nopython``  mode
 ===========================================================
 
