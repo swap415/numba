@@ -332,6 +332,8 @@ _options_mixin = include_default_options(
 
 
 class CPUTargetOptions(_options_mixin, TargetOptions):
+    inheritable = ("_nrt", "fastmath", "error_model", "forceinline")
+
     def finalize(self, flags, options):
         if not flags.is_set("enable_pyobject"):
             flags.enable_pyobject = True

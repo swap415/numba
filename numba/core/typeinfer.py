@@ -1539,7 +1539,9 @@ https://numba.readthedocs.io/en/stable/user/troubleshoot.html#my-code-has-an-unt
             disp = fnty.dispatcher_type.dispatcher
             pysig, args = disp.fold_argument_types(pos_args, kw_args)
 
-            frame = self.context.callstack.match(disp.py_func, args)
+            flags = (disp._compiler.get_flags()
+                     if disp.targetdescr.options.inheritable else None)
+            frame = self.context.callstack.match(disp.py_func, args, flags)
 
             # If the signature is not being compiled
             if frame is None:
@@ -1547,12 +1549,13 @@ https://numba.readthedocs.io/en/stable/user/troubleshoot.html#my-code-has-an-unt
                                                          pos_args, kw_args)
                 fndesc = disp.overloads[args].fndesc
                 qual = qualifying_prefix(fndesc.modname, fndesc.qualname)
-                fnty.add_overloads(args, qual, fndesc.uid)
+                fnty.add_overloads(args, qual, fndesc.uid, fndesc.abi_tags)
                 return sig
 
             fnid = frame.func_id
             qual = qualifying_prefix(fnid.modname, fnid.func_qualname)
-            fnty.add_overloads(args, qual, fnid.unique_id)
+            fnty.add_overloads(args, qual, fnid.unique_id,
+                              [frame.flags.get_mangle_string()])
             # Resume propagation in parent frame
             return_type = frame.typeinfer.return_types_from_partial()
             # No known return type
@@ -1606,12 +1609,14 @@ https://numba.readthedocs.io/en/stable/user/troubleshoot.html#my-code-has-an-unt
                 e.patch_message(msg % e)
                 raise
 
-        if isinstance(typ, types.Dispatcher) and typ.dispatcher.is_compiling:
+        dispatcher = (typ.dispatcher._get_dispatcher_for_flags()
+                      if isinstance(typ, types.Dispatcher) else None)
+        if dispatcher is not None and dispatcher.is_compiling:
             # Recursive call
             callstack = self.context.callstack
-            callframe = callstack.findfirst(typ.dispatcher.py_func)
+            callframe = callstack.findfirst(dispatcher.py_func)
             if callframe is not None:
-                typ = types.RecursiveCall(typ)
+                typ = types.RecursiveCall(types.Dispatcher(dispatcher))
             else:
                 raise NotImplementedError(
                     "call to %s: unsupported recursion"

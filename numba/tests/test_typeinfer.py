@@ -975,6 +975,23 @@ class TestTypeInferFailCache(unittest.TestCase):
             resolve_cache = callstack.lookup_resolve_cache(functype, (), ())
             self.assertFalse(resolve_cache.has_failed_previously())
 
+    def test_fail_cache_separates_flags(self):
+        from numba.core.compiler import Flags
+        from numba.core.targetconfig import ConfigStack
+
+        callstack, cb_register = self.mock_callstack_register()
+        strict = Flags()
+        fast = Flags()
+        fast.fastmath = True
+        functype = object()
+        with cb_register, ConfigStack().enter(strict):
+            callstack.lookup_resolve_cache(functype, (), ()).mark_failed()
+            with ConfigStack().enter(fast):
+                cached = callstack.lookup_resolve_cache(functype, (), ())
+                self.assertFalse(cached.has_failed_previously())
+            cached = callstack.lookup_resolve_cache(functype, (), ())
+            self.assertTrue(cached.has_failed_previously())
+
 
 if __name__ == '__main__':
     unittest.main()

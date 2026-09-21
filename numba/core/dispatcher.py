@@ -20,6 +20,7 @@ from numba.core.typing.templates import fold_arguments
 from numba.core.typing.typeof import Purpose, typeof
 from numba.core.bytecode import get_code_object
 from numba.core.caching import NullCache, FunctionCache
+from numba.core.targetconfig import ConfigStack
 from numba.core import entrypoints
 import numba.core.event as ev
 
@@ -98,10 +99,16 @@ class _FunctionCompiler(object):
         else:
             return True, retval
 
+    def get_flags(self, inherit=False):
+        parent = ConfigStack.top_or_none() if inherit else None
+        with ConfigStack().enter(parent):
+            flags = compiler.Flags()
+            self.targetdescr.options.parse_as_flags(flags, self.targetoptions)
+            return self._customize_flags(flags)
+
     def _compile_core(self, args, return_type):
-        flags = compiler.Flags()
-        self.targetdescr.options.parse_as_flags(flags, self.targetoptions)
-        flags = self._customize_flags(flags)
+        flags = self.get_flags(
+            inherit=not self.targetdescr.options.inheritable)
 
         impl = self._get_implementation(args, {})
         cres = compiler.compile_extra(self.targetdescr.typing_context,
@@ -299,6 +306,9 @@ class _DispatcherBase(_dispatcher.Dispatcher):
     def fold_argument_types(self, args, kws):
         return self._compiler.fold_argument_types(args, kws)
 
+    def _get_dispatcher_for_flags(self):
+        return self
+
     def get_call_template(self, args, kws):
         """
         Get a typing.ConcreteTemplate for this dispatcher and the given
@@ -306,6 +316,10 @@ class _DispatcherBase(_dispatcher.Dispatcher):
 
         A (template, pysig, args, kws) tuple is returned.
         """
+        dispatcher = self._get_dispatcher_for_flags()
+        if dispatcher is not self:
+            return dispatcher.get_call_template(args, kws)
+
         # XXX how about a dispatcher template class automating the
         # following?
 
@@ -803,6 +817,8 @@ class Dispatcher(serialize.ReduceMixin, _MemoMixin, _DispatcherBase):
                                         targetoptions, locals, pipeline_class)
         self._cache_hits = collections.Counter()
         self._cache_misses = collections.Counter()
+        self._flag_variants = {}
+        self._declared_signatures = {}
 
         self._type = types.Dispatcher(self)
         self.typingctx.insert_global(self, self._type)
@@ -819,7 +835,53 @@ class Dispatcher(serialize.ReduceMixin, _MemoMixin, _DispatcherBase):
         return types.Dispatcher(self)
 
     def enable_caching(self):
-        self._cache = FunctionCache(self.py_func)
+        self._cache = FunctionCache(self.py_func, self._compiler.get_flags())
+        for variant in self._flag_variants.values():
+            variant.enable_caching()
+
+    def disable_compile(self, val=True):
+        if val:
+            for variant in self._flag_variants.values():
+                for sig in variant.nopython_signatures:
+                    if sig.args not in self.overloads:
+                        self.compile(sig.args)
+        super().disable_compile(val)
+        for variant in self._flag_variants.values():
+            if val:
+                for sig in self.nopython_signatures:
+                    if sig.args not in variant.overloads:
+                        variant.compile(self._declared_signatures.get(
+                            sig.args, sig.args))
+            variant.disable_compile(val)
+
+    def _get_dispatcher_for_flags(self):
+        if (not self.targetdescr.options.inheritable or
+                ConfigStack.top_or_none() is None):
+            return self
+        flags = self._compiler.get_flags(inherit=True)
+        if flags == self._compiler.get_flags():
+            return self
+        if flags not in self._flag_variants:
+            options = self.targetoptions.copy()
+            for name in self.targetdescr.options.inheritable:
+                mapping = getattr(self.targetdescr.options, name)
+                options[name] = getattr(flags, mapping.flag_name)
+            variant = type(self)(self.py_func, locals=self.locals,
+                                 targetoptions=options,
+                                 pipeline_class=self._compiler.pipeline_class)
+            self._flag_variants[flags] = variant
+            try:
+                if isinstance(self._cache, FunctionCache):
+                    variant.enable_caching()
+                if not self._can_compile:
+                    for sig in self.nopython_signatures:
+                        variant.compile(self._declared_signatures.get(
+                            sig.args, sig.args))
+                    variant.disable_compile()
+            except BaseException:
+                del self._flag_variants[flags]
+                raise
+        return self._flag_variants[flags]
 
     def __get__(self, obj, objtype=None):
         '''Allow a JIT function to be bound as a method to an object'''
@@ -839,7 +901,8 @@ class Dispatcher(serialize.ReduceMixin, _MemoMixin, _DispatcherBase):
         if self._can_compile:
             sigs = []
         else:
-            sigs = [cr.signature for cr in self.overloads.values()]
+            sigs = [self._declared_signatures.get(args, args)
+                    for args in self.overloads]
 
         return dict(
             uuid=str(self._uuid),
@@ -906,6 +969,8 @@ class Dispatcher(serialize.ReduceMixin, _MemoMixin, _DispatcherBase):
                                                             cres.fndesc,
                                                             [cres.library])
                     self.add_overload(cres)
+                    if return_type is not None:
+                        self._declared_signatures[args] = cres.signature
                     return cres.entry_point
 
                 self._cache_misses[sig] += 1
@@ -924,6 +989,8 @@ class Dispatcher(serialize.ReduceMixin, _MemoMixin, _DispatcherBase):
                         raise e.bind_fold_arguments(folded)
                     self.add_overload(cres)
                 self._cache.save_overload(sig, cres)
+                if return_type is not None:
+                    self._declared_signatures[args] = cres.signature
                 return cres.entry_point
 
     def get_compile_result(self, sig):
@@ -972,9 +1039,11 @@ class Dispatcher(serialize.ReduceMixin, _MemoMixin, _DispatcherBase):
         self._can_compile = True
         try:
             for sig in sigs:
-                self.compile(sig)
+                self.compile(self._declared_signatures.get(sig, sig))
         finally:
             self._can_compile = old_can_compile
+        for variant in self._flag_variants.values():
+            variant.recompile()
 
     @property
     def stats(self):

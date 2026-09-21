@@ -24,6 +24,30 @@ def simple_usecase_caller(x):
     return simple_usecase(x)
 
 
+def cancellation_usecase(a, b):
+    return (a - b) + b
+
+
+def check_compiler_flags(fast_first, cache_hits):
+    variants = [(False, 0.0), ({'reassoc', 'nsz'}, 0.5)]
+    if fast_first:
+        variants.reverse()
+    for fastmath, expected in variants:
+        func = jit(cache=True, fastmath=fastmath)(cancellation_usecase)
+        assert func(0.5, 1e16) == expected
+        assert sum(func.stats.cache_hits.values()) == cache_hits
+        assert sum(func.stats.cache_misses.values()) == 1 - cache_hits
+
+    inherited = jit(cache=True)(cancellation_usecase)
+    for fastmath, expected in variants:
+        @jit(fastmath=fastmath)
+        def caller(a, b):
+            return inherited(a, b)
+
+        assert caller(0.5, 1e16) == expected
+    assert inherited(0.5, 1e16) == 0.0
+
+
 @jit(cache=True, nopython=True)
 def add_usecase(x, y):
     return x + y + Z

@@ -11,6 +11,8 @@ class TargetOptions:
     """Target options maps user options from decorators to the
     ``numba.core.compiler.Flags`` used by lowering and target context.
     """
+    inheritable = ()
+
     class Mapping:
         def __init__(self, flag_name, apply=lambda x: x):
             self.flag_name = flag_name

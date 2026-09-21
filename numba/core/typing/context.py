@@ -8,6 +8,7 @@ import contextlib
 import operator
 
 from numba.core import types, errors, config
+from numba.core.targetconfig import ConfigStack
 from numba.core.typeconv import Conversion, rules
 from numba.core.typing import templates
 from numba.core.utils import order_by_target_specificity
@@ -65,7 +66,8 @@ class CallStack(Sequence):
     def register(self, target, typeinfer, func_id, args):
         with contextlib.ExitStack() as undo:
             # guard compiling the same function with the same signature
-            if self.match(func_id.func, args):
+            flags = ConfigStack.top_or_none()
+            if self.match(func_id.func, args, flags):
                 msg = "compiler re-entrant to the same function signature"
                 raise errors.NumbaRuntimeError(msg)
 
@@ -110,13 +112,14 @@ class CallStack(Sequence):
         except StopIteration:
             return
 
-    def match(self, py_func, args):
+    def match(self, py_func, args, flags=None):
         """
         Returns first function that matches *py_func* and the arguments types in
         *args*; or, None if no match.
         """
         for frame in self.finditer(py_func):
-            if frame.args == args:
+            if (frame.args == args and
+                    (flags is None or frame.flags == flags)):
                 return frame
 
     def lookup_resolve_cache(self, func, args, kws) -> "_ResolveCache":
@@ -140,7 +143,7 @@ class CallStack(Sequence):
             else:
                 return True
 
-        key = func, args, normalize_dict(kws)
+        key = func, args, normalize_dict(kws), ConfigStack.top_or_none()
         if not hashable(key):
             return _ResolveCache()
         return self._fail_cache.setdefault(key, _ResolveCache())
@@ -189,6 +192,7 @@ class CallFrame(object):
         self.func_id = func_id
         self.args = args
         self.target = target
+        self.flags = ConfigStack.top_or_none()
         self._inferred_retty = set()
 
     def __repr__(self):
