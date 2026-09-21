@@ -105,3 +105,55 @@ methods for accessing individual record for each pass.
     :members: get_raw_data, get_total_time, list_records, list_top, summary
 
 .. autoclass:: numba.misc.llvm_pass_timings.PassTimingRecord
+
+
+.. _developer-llvm-remarks:
+
+Getting LLVM Optimization Remarks
+---------------------------------
+
+LLVM optimization remarks explain transformations that succeeded, were
+missed, or were analyzed. Set :envvar:`NUMBA_LLVM_PASS_REMARKS` to an LLVM
+regular expression matching the pass names of interest. Capturing is disabled
+unless the option is set, because unrestricted remark output can be large.
+
+For example, this records loop-vectorizer decisions with source locations:
+
+.. code-block:: python
+
+   import numpy as np
+   from numba import jit
+
+   @jit(debug=True)
+   def add(left, right, out):
+       for i in range(out.size):
+           out[i] = left[i] + right[i]
+
+   left = np.arange(64.0)
+   right = left + 1
+   out = np.empty_like(left)
+   add(left, right, out)
+
+   metadata = add.get_metadata(add.signatures[0])
+   for stage, remarks in metadata['llvm_pass_remarks'].items():
+       print(stage)
+       print(remarks)
+
+Run it with the filter set before compilation:
+
+.. code-block:: console
+
+   $ NUMBA_LLVM_PASS_REMARKS=loop-vectorize python example.py
+
+The metadata value is a dictionary from stage name to raw LLVM YAML. It can
+contain function-level pre-optimization, cheap module optimization, and full
+module optimization records. Stages with no matching remarks are omitted.
+Use ``debug=True`` or :envvar:`NUMBA_DEBUGINFO` for ``DebugLoc`` source
+locations. Setting an empty filter captures all passes; a narrow filter is
+recommended. Capture covers these LLVM IR optimization stages, not machine-code
+passes during object finalization.
+
+Remarks belong to the compilation of one dispatcher signature. They are not
+retroactively produced for already-compiled overloads and are not restored
+from Numba's on-disk cache. Pass names, schemas, and wording are LLVM
+diagnostics and can change when Numba updates LLVM.

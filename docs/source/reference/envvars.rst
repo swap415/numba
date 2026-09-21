@@ -301,6 +301,20 @@ These variables influence what is printed out during compilation of
 
     *Default value*: ``0`` (Off)
 
+.. envvar:: NUMBA_LLVM_PASS_REMARKS
+
+    If defined, record serialized LLVM optimization remarks for passes whose
+    names match this regular expression. For example,
+    ``NUMBA_LLVM_PASS_REMARKS=loop-vectorize`` records loop-vectorizer
+    decisions. An empty value records remarks from every pass.
+
+    Remarks are grouped by optimization stage in the
+    ``llvm_pass_remarks`` entry of dispatcher compilation metadata. Compile
+    with debug information to include source locations. See
+    :ref:`developer-llvm-remarks`.
+
+    *Default value*: undefined (Off)
+
 .. envvar:: NUMBA_JIT_COVERAGE
 
    Set to ``1`` to enable coverage data reporting by the JIT compiler on 
