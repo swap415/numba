@@ -508,8 +508,9 @@ class BaseNativeLowering(abc.ABC, LoweringPass):
             post_stats = llvm.newpassmanagers.dump_refprune_stats()
             metadata['prune_stats'] = post_stats - pre_stats
 
-            # Save the LLVM pass timings
+            # Save the LLVM diagnostics
             metadata['llvm_pass_timings'] = library.recorded_timings
+            metadata['llvm_pass_remarks'] = library.recorded_remarks
         return True
 
 

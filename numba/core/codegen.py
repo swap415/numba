@@ -531,6 +531,7 @@ class CodeLibrary(metaclass=ABCMeta):
         self._name = name
         ptc_name = f"{self.__class__.__name__}({self._name!r})"
         self._recorded_timings = PassTimingsCollection(ptc_name)
+        self._recorded_remarks = {}
         # Track names of the dynamic globals
         self._dynamic_globals = []
 
@@ -544,6 +545,22 @@ class CodeLibrary(metaclass=ABCMeta):
     @property
     def recorded_timings(self):
         return self._recorded_timings
+
+    @property
+    def recorded_remarks(self):
+        return self._recorded_remarks
+
+    def _run_pass_manager(self, pass_manager, target, pass_builder, name):
+        remarks_filter = config.LLVM_PASS_REMARKS
+        if remarks_filter is None:
+            pass_manager.run(target, pass_builder)
+            return
+
+        remarks = pass_manager.run_with_remarks(
+            target, pass_builder, remarks_filter=remarks_filter,
+        )
+        if remarks:
+            self._recorded_remarks[name] = remarks
 
     @property
     def codegen(self):
@@ -662,7 +679,7 @@ class CPUCodeLibrary(CodeLibrary):
             fpm, pb = self._codegen._function_pass_manager()
             k = f"Function passes on {func.name!r}"
             with self._recorded_timings.record(k, pb):
-                fpm.run(func, pb)
+                self._run_pass_manager(fpm, func, pb, k)
 
     def _optimize_final_module(self):
 
@@ -681,14 +698,16 @@ class CPUCodeLibrary(CodeLibrary):
         with self._recorded_timings.record(cheap_name, mpb_cheap):
             # A cheaper optimisation pass is run first to try and get as many
             # refops into the same function as possible via inlining
-            mpm_cheap.run(self._final_module, mpb_cheap)
+            self._run_pass_manager(mpm_cheap, self._final_module, mpb_cheap,
+                                   cheap_name)
         # Refop pruning is then run on the heavily inlined function
         if not config.LLVM_REFPRUNE_PASS:
             self._final_module = remove_redundant_nrt_refct(self._final_module)
         full_name = "Module passes (full optimization)"
         with self._recorded_timings.record(full_name, mpb_full):
             # The full optimisation suite is then run on the refop pruned IR
-            mpm_full.run(self._final_module, mpb_full)
+            self._run_pass_manager(mpm_full, self._final_module, mpb_full,
+                                   full_name)
 
     def _get_module_for_linking(self):
         """

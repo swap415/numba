@@ -569,11 +569,15 @@ class _EnvReloader(object):
             "NUMBA_USE_LLVMLITE_MEMORY_MANAGER", int, None
         )
 
-        # Timing support.
+        # LLVM diagnostics.
 
         # LLVM_PASS_TIMINGS enables LLVM recording of pass timings.
         LLVM_PASS_TIMINGS = _readenv(
             "NUMBA_LLVM_PASS_TIMINGS", int, 0,
+        )
+        # LLVM_PASS_REMARKS filters LLVM optimization remarks by pass name.
+        LLVM_PASS_REMARKS = _readenv(
+            "NUMBA_LLVM_PASS_REMARKS", optional_str, None,
         )
 
         # Coverage support.
