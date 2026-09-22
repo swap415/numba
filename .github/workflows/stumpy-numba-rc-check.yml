@@ -7,8 +7,8 @@
 #   conflicts, e.g. numba 0.67.0rc1 + llvmlite 0.50.0rc3).
 # - Always checks out stumpy-dev/stumpy (automate's checkout `if` is leftover
 #   from the compatibility workflow; it happens to pass when both sides are empty).
-# - Default Python is automate's "safe" version: n-2 of non-EOL CPython
-#   (currently 3.13; see stumpy versions.py `-mode safe`).
+# - Default Python is 3.15 (prerelease). automate's "safe" version is n-2 of
+#   non-EOL CPython (currently 3.13; see stumpy versions.py `-mode safe`).
 name: STUMPY vs Numba RC Check
 
 on:
@@ -23,9 +23,9 @@ on:
         required: true
         default: "0.50.0rc3"
       python_version:
-        description: Python version (automate "safe" is currently 3.13)
+        description: Python version (3.15 is still a prerelease)
         required: true
-        default: "3.13"
+        default: "3.15"
 
 permissions:
   contents: read
@@ -38,6 +38,7 @@ jobs:
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ inputs.python_version }}
+          allow-prereleases: true
 
       - name: Display Python Version
         run: python -c "import sys; print(sys.version)"
