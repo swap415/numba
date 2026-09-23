@@ -7,6 +7,42 @@ import warnings
 from numba.core.errors import NumbaWarning
 
 
+def disassemble_object(data: bytes, triple: str) -> str:
+    """Disassemble text sections of a relocatable object using Capstone."""
+    try:
+        import capstone as cs
+    except ImportError as exc:
+        raise RuntimeError("capstone package needed for disassembly") from exc
+    from llvmlite import binding as llvm
+
+    arch = triple.split('-')[0]
+    if arch in ('x86_64', 'i386', 'i686'):
+        mode = cs.CS_MODE_64 if arch == 'x86_64' else cs.CS_MODE_32
+        decoder = cs.Cs(cs.CS_ARCH_X86, mode)
+    elif arch in ('aarch64', 'arm64'):
+        decoder = cs.Cs(cs.CS_ARCH_ARM64, cs.CS_MODE_ARM)
+    else:
+        raise ValueError(f"Unsupported disassembly architecture: {arch}")
+
+    lines = []
+    with llvm.ObjectFileRef.from_data(data) as obj:
+        for section in obj.sections():
+            if not section.is_text() or not section.size():
+                continue
+            name = section.name().decode('utf-8', errors='replace')
+            lines.append(f"{name}:")
+            code = section.data()
+            end = section.address()
+            for address, size, mnemonic, operands in decoder.disasm_lite(
+                    code, section.address()):
+                lines.append(f"{address:#x}\t{mnemonic}\t{operands}".rstrip())
+                end = address + size
+            if end != section.address() + len(code):
+                msg = f"Incomplete disassembly of {name} at {end:#x}"
+                raise ValueError(msg)
+    return '\n'.join(lines)
+
+
 def disassemble_elf_to_cfg(elf, mangled_symbol):
     """
     Gets the CFG of the disassembly of an ELF object, elf, at mangled name,

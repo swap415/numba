@@ -152,6 +152,13 @@ class _DispatcherBase(_dispatcher.Dispatcher[_FuncT_co], Generic[_FuncT_co]):
     @overload  # signature=<given>
     def inspect_asm(self, signature: _InputSignature) -> str: ...
 
+    @overload
+    def inspect_disasm(
+        self, signature: None = None
+    ) -> dict[_InputSignature, str]: ...
+    @overload
+    def inspect_disasm(self, signature: _InputSignature) -> str: ...
+
     #
     @overload  # pretty=False (default)
     def inspect_types(

@@ -487,6 +487,36 @@ class _DispatcherBase(_dispatcher.Dispatcher):
 
         return dict((sig, self.inspect_asm(sig)) for sig in self.signatures)
 
+    def inspect_disasm(
+        self, signature: tuple[types.Type, ...] | None = None,
+    ) -> str | dict[tuple[types.Type, ...], str]:
+        """Get Capstone disassembly of compiled CPU object text sections.
+
+        Requires the optional capstone package. Supports x86 and AArch64.
+        Sections include wrappers and helpers. Addresses are object-relative;
+        relocations are not applied. Cached code is not supported.
+
+        Parameters
+        ----------
+        signature : tuple of numba types, optional
+            Select a compiled signature, or omit to inspect all signatures.
+
+        Returns
+        -------
+        disasm : dict[signature, str] or str
+            Disassembly for one signature, or a dictionary for all signatures.
+
+        Raises
+        ------
+        RuntimeError
+            If capstone is missing or code was loaded from cache.
+        ValueError
+            If the architecture is unsupported or decoding is incomplete.
+        """
+        if signature is not None:
+            return self.overloads[signature].library.get_disasm_str()
+        return {sig: self.inspect_disasm(sig) for sig in self.signatures}
+
     def inspect_types(self, file=None, signature=None,
                       pretty=False, style='default', **kwargs):
         """Print/return Numba intermediate representation (IR)-annotated code.
