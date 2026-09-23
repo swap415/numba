@@ -276,6 +276,45 @@ Dispatcher objects
             │ ret                     │   │ ret                     │
             └─────────────────────────┘   └─────────────────────────┘
 
+   .. method:: inspect_codegen(signature=None, cpus=None, retarget=())
+
+      Compact ISA + static pipeline card for a compiled signature. This is
+      the low-token alternative to dumping :meth:`inspect_llvm` and
+      :meth:`inspect_asm`.
+
+      Requires the ``capstone`` package to decode the JIT object (code lives
+      in ``.ltext``, not ``.text``). Requires ``llvm-mca`` on ``$PATH`` for
+      cycles/iter and port pressure. ``llc`` is only needed when
+      *retarget* is used.
+
+      The card extracts the first LLVM function (dropping NRT / CPython
+      wrappers) and the hottest packed SIMD loop before calling
+      ``llvm-mca``. Full-module IR cannot be retargeted: ``NRT_decref``
+      uses the host-only ``llvm.x86.atomic.sub.cc`` intrinsic.
+
+      ``llvm-mca`` is compute-only. Bandwidth-bound kernels will run
+      slower than the reported throughput.
+
+      Example::
+
+        from numba import jit
+        import numpy as np
+
+        @jit
+        def saxpy(a, x, y, out):
+            for i in range(x.shape[0]):
+                out[i] = a * x[i] + y[i]
+
+        saxpy(2.0, np.ones(64), np.ones(64), np.empty(64))
+        print(saxpy.inspect_codegen(saxpy.signatures[0]))
+
+      CLI::
+
+        python -m numba.misc.codegen_card
+        python -m numba.misc.codegen_card --compare
+        numba --codegen-card
+        numba --codegen-compare
+
    .. method:: recompile()
 
       Recompile all existing signatures.  This can be useful for example if

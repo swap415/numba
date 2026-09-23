@@ -617,6 +617,21 @@ class _DispatcherBase(_dispatcher.Dispatcher):
         return dict((sig, self.inspect_disasm_cfg(sig))
                     for sig in self.signatures)
 
+    def inspect_codegen(self, signature=None, **kwargs):
+        """Compact ISA + llvm-mca card for the compiled function.
+
+        Optional: ``capstone`` package, ``llvm-mca`` on ``$PATH``.
+        See :mod:`numba.misc.codegen_card`.
+
+        signature : tuple of numba types, optional
+            Card for this signature only. If omitted, a dict keyed by
+            signature is returned.
+        """
+        from numba.misc.codegen_card import inspect_codegen as _card
+        if signature is not None:
+            return _card(self, signature, **kwargs)
+        return dict((sig, _card(self, sig, **kwargs)) for sig in self.signatures)
+
     def get_annotation_info(self, signature=None):
         """
         Gets the annotation information for the function specified by
