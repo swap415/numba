@@ -197,7 +197,10 @@ These variables influence what is printed out during compilation of
 .. envvar:: NUMBA_ENABLE_PROFILING
 
    Enables JIT events of LLVM in order to support profiling of jitted functions.
-   This option is automatically enabled under certain profilers.
+   This option is automatically enabled under certain profilers. On Linux,
+   official Numba packages make generated symbols and source locations
+   available through perf's jitdump interface. See
+   :ref:`profiling-with-perf`.
 
 .. envvar:: NUMBA_TRACE
 
